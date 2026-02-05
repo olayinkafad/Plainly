@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Plainly",
+    "slug": "plainly",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#ffffff",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.plainly.app"
+    },
+    "android": {
+      "package": "com.plainly.app"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "plainly"
+  }
+}
