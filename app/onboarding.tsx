@@ -3,7 +3,6 @@ import { View, StyleSheet, FlatList, Dimensions, NativeScrollEvent, NativeSynthe
 import { useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Title, Body } from '../components/typography'
-import AmbientIconBackground from '../components/AmbientIconBackground'
 import Icon from '../components/Icon'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -242,7 +241,6 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <AmbientIconBackground variant="onboarding" />
       <View style={styles.content}>
         {/* Progress indicators - always visible at top */}
         <View style={styles.progressContainer}>
@@ -293,6 +291,10 @@ export default function Onboarding() {
             accessibilityLabel="Record your first thought"
             accessibilityRole="button"
           >
+            {/* Label card - at the top */}
+            <View style={styles.labelCard}>
+              <Body style={styles.labelText}>Record your first thought</Body>
+            </View>
             {/* Pulse rings */}
             <View style={styles.pulseContainer}>
               {!prefersReducedMotion && (
@@ -319,12 +321,8 @@ export default function Onboarding() {
               )}
               {/* Solid circle */}
               <View style={styles.solidCircle}>
-                <Icon name="microphone" size={24} color="#2563EB" />
+                <Icon name="microphone" size={28} color="#FFFFFF" />
               </View>
-            </View>
-            {/* Label card */}
-            <View style={styles.labelCard}>
-              <Body style={styles.labelText}>Record your first thought</Body>
             </View>
           </Pressable>
         </View>
@@ -427,33 +425,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ctaContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12, // --space-3
+    gap: 16, // --space-4
   },
   pulseContainer: {
-    width: 60,
-    height: 60,
+    width: 80,
+    height: 80,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   pulseRing: {
     position: 'absolute',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    borderWidth: 2,
-    borderColor: '#2563EB', // --color-accent-primary
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#2563EB', // --color-accent-primary
   },
   solidCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#2563EB', // --color-accent-primary
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#2563EB', // --color-accent-primary
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
@@ -465,6 +460,14 @@ const styles = StyleSheet.create({
     borderRadius: 10, // --radius-md
     borderWidth: 1,
     borderColor: '#E5E7EB', // --color-border-default
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   labelText: {
     color: '#111827', // --color-text-primary
