@@ -349,7 +349,6 @@ export default function RecordingModal({
 
             {/* Header */}
             <View style={[styles.header, { paddingTop: 8 }]}>
-              <Title style={styles.title}>Recording</Title>
               <Pressable onPress={handleCancel} style={styles.closeButton}>
                 <Icon name="x" size={24} color="#6B7280" />
               </Pressable>
@@ -486,7 +485,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     paddingHorizontal: 0,
     marginBottom: 32, // --space-8
   },

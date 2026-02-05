@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated } from 'react-native'
+import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated, AccessibilityInfo } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from '../components/Icon'
 import { format } from 'date-fns'
-import Button from '../components/Button'
 import { Title, Body, Meta } from '../components/typography'
 import { recordingsStore, Recording } from '../store/recordings'
 import { OutputType } from '../types'
@@ -27,10 +26,83 @@ export default function Home() {
   const [formatSelectionRecordingId, setFormatSelectionRecordingId] = useState<string | null>(null)
   const [showToast, setShowToast] = useState(false)
   const toastAnim = useRef(new Animated.Value(0)).current
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  
+  // Pulse ring animations
+  const ring1Anim = useRef(new Animated.Value(0)).current
+  const ring2Anim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
     loadRecordings()
   }, [])
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setPrefersReducedMotion)
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setPrefersReducedMotion)
+    return () => subscription.remove()
+  }, [])
+
+  // Pulse ring animation
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      ring1Anim.setValue(0)
+      ring2Anim.setValue(0)
+      return
+    }
+
+    const createRingAnimation = (animValue: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(animValue, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    }
+
+    // Reset values before starting
+    ring1Anim.setValue(0)
+    ring2Anim.setValue(0)
+
+    const ring1Animation = createRingAnimation(ring1Anim, 0)
+    const ring2Animation = createRingAnimation(ring2Anim, 700)
+
+    ring1Animation.start()
+    ring2Animation.start()
+
+    return () => {
+      ring1Animation.stop()
+      ring2Animation.stop()
+    }
+  }, [prefersReducedMotion, ring1Anim, ring2Anim])
+
+  const ring1Scale = ring1Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.8],
+  })
+
+  const ring1Opacity = ring1Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.25, 0],
+  })
+
+  const ring2Scale = ring2Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.8],
+  })
+
+  const ring2Opacity = ring2Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.25, 0],
+  })
 
   // Auto-open recording modal if coming from onboarding
   useEffect(() => {
@@ -273,20 +345,48 @@ export default function Home() {
       {/* Persistent Bottom Action Area */}
       <SafeAreaView edges={['bottom']} style={styles.bottomActionAreaContainer}>
         <View style={[styles.bottomActionArea, { paddingBottom: insets.bottom + 16, paddingTop: 16 }]}>
-          <Button variant="primary" fullWidth onPress={handleRecord}>
-            <View style={styles.buttonContent}>
-              <Icon name="microphone" size={20} color="#FFFFFF" />
-              <Body style={[styles.buttonTextPrimary, styles.buttonTextWithIcon]}>Record a thought</Body>
+          <Pressable
+            style={styles.ctaContainer}
+            onPress={handleRecord}
+            accessibilityLabel={recordings.length === 0 ? "Record your first thought" : "Record your thought"}
+            accessibilityRole="button"
+          >
+            {/* Label card - at the top */}
+            <View style={styles.labelCard}>
+              <Body style={styles.labelText}>
+                {recordings.length === 0 ? 'Record your first thought' : 'Record your thought'}
+              </Body>
             </View>
-          </Button>
-          {/* Upload button hidden for MVP - will be added in later iterations */}
-          {/* <View style={styles.buttonSpacing} />
-          <Button variant="secondary" fullWidth onPress={handleUpload}>
-            <View style={styles.buttonContent}>
-              <Icon name="upload" size={20} color="#111827" />
-              <Body style={[styles.buttonTextSecondary, styles.buttonTextWithIcon]}>Upload (MP3, M4A, WAV)</Body>
+            {/* Pulse rings */}
+            <View style={styles.pulseContainer}>
+              {!prefersReducedMotion && (
+                <>
+                  <Animated.View
+                    style={[
+                      styles.pulseRing,
+                      {
+                        transform: [{ scale: ring1Scale }],
+                        opacity: ring1Opacity,
+                      },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.pulseRing,
+                      {
+                        transform: [{ scale: ring2Scale }],
+                        opacity: ring2Opacity,
+                      },
+                    ]}
+                  />
+                </>
+              )}
+              {/* Solid circle */}
+              <View style={styles.solidCircle}>
+                <Icon name="microphone" size={28} color="#FFFFFF" />
+              </View>
             </View>
-          </Button> */}
+          </Pressable>
         </View>
       </SafeAreaView>
 
@@ -413,31 +513,57 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     alignSelf: 'center',
     paddingHorizontal: 16, // --space-4
+    alignItems: 'center',
   },
-  bottomCTA: {
-    width: '100%',
-    paddingTop: 24, // --space-6
-  },
-  buttonSpacing: {
-    height: 12, // --space-3
-  },
-  buttonContent: {
-    flexDirection: 'row',
+  ctaContainer: {
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 16, // --space-4
   },
-  buttonTextWithIcon: {
-    marginLeft: 8, // --space-2
+  pulseContainer: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  buttonTextPrimary: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Satoshi-Medium',
+  pulseRing: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#2563EB', // --color-accent-primary
   },
-  buttonTextSecondary: {
+  solidCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#2563EB', // --color-accent-primary
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  labelCard: {
+    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    paddingHorizontal: 16, // --space-4
+    paddingVertical: 12, // --space-3
+    borderRadius: 10, // --radius-md
+    borderWidth: 1,
+    borderColor: '#E5E7EB', // --color-border-default
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  labelText: {
     color: '#111827', // --color-text-primary
-    fontSize: 16,
-    fontFamily: 'Satoshi-Medium',
+    fontSize: 14, // --font-size-sm
+    fontWeight: '500', // --font-weight-medium
   },
   // Recordings List State
   listContainer: {
