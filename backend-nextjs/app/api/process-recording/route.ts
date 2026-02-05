@@ -1,27 +1,101 @@
-// Next.js API Route for Vercel deployment
-// This file should be at: app/api/process-recording/route.ts in a Next.js project
+// Next.js API Route for processing audio recordings
+// Handles: audio → transcript (Whisper) → structured output (GPT-4o-mini)
 
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import https from 'https'
 
-// Initialize OpenAI client
+// Initialize OpenAI client (used for GPT, not Whisper due to node-fetch issues)
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-// Format-specific prompts
+// Constants
+const MIN_AUDIO_SIZE_BYTES = 1000 // ~1KB minimum (very short recordings are likely noise)
+const MAX_TRANSCRIPT_CHARS = 50000 // Truncate very long transcripts to avoid token limits
+
+// Format-specific prompts - designed to handle edge cases gracefully
 const formatPrompts: Record<string, string> = {
   transcript:
-    'Return the transcript exactly as transcribed, with minimal editing. Only remove obvious filler words like "um", "uh", "like" when they appear repeatedly. Preserve the original meaning and structure.',
-  
+    'Clean up this transcript by removing filler words (um, uh, like, you know) when they appear repeatedly. Keep the meaning intact. If the content is very short or unclear, return it as-is with no changes.',
+
   summary:
-    'Create a clear, concise summary of the main ideas and topics discussed. Focus on the key themes and overall narrative. Be objective and factual.',
-  
+    'Create a clear, concise summary of the main ideas discussed. Focus on key themes and the overall narrative. Be objective and factual. If the content is too brief or lacks a clear topic, return a short summary of whatever was said.',
+
   action_items:
-    'Extract all tasks, decisions, and next steps mentioned. Format as a numbered list. Only include items that are explicitly stated as actions or decisions. If no action items are found, return "No action items found."',
-  
+    'Extract all tasks, decisions, and next steps mentioned. Format as a numbered list. Only include items explicitly stated as actions or decisions. If no action items are found, return exactly: "No action items detected in this recording."',
+
   key_points:
-    'Extract the most important points and ideas. Format as bullet points. Focus on distinct, meaningful insights. Remove redundancy. If the content is too brief or lacks distinct points, return "Not enough distinct points to extract."',
+    'Extract the most important points and ideas as bullet points. Focus on distinct, meaningful insights. Remove redundancy. If the content is too brief to extract multiple points, return the single main point or state: "Recording too brief to extract key points."',
+}
+
+// Custom Whisper transcription using native https (node-fetch has issues on Node 24)
+async function transcribeAudio(audioBuffer: Buffer, filename: string, mimeType: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const boundary = '----FormBoundary' + Math.random().toString(16).slice(2)
+
+    // Build multipart form data
+    const header = Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Type: ${mimeType}\r\n\r\n`,
+      'utf8'
+    )
+
+    const footer = Buffer.from(
+      `\r\n--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="model"\r\n\r\n` +
+      `whisper-1\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="language"\r\n\r\n` +
+      `en\r\n` +
+      `--${boundary}--\r\n`,
+      'utf8'
+    )
+
+    const fullBody = Buffer.concat([header, audioBuffer, footer])
+
+    const req = https.request({
+      hostname: 'api.openai.com',
+      path: '/v1/audio/transcriptions',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': fullBody.length,
+      },
+      timeout: 120000, // 2 minute timeout
+    }, (res) => {
+      let data = ''
+      res.on('data', (chunk) => { data += chunk })
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          try {
+            const json = JSON.parse(data)
+            resolve(json.text || '')
+          } catch {
+            resolve(data) // If not JSON, return as-is
+          }
+        } else {
+          console.error('Whisper API error:', res.statusCode, data)
+          reject(new Error(`Whisper API error: ${res.statusCode} - ${data}`))
+        }
+      })
+    })
+
+    req.on('error', (err) => {
+      console.error('Whisper request error:', err)
+      reject(err)
+    })
+
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('Whisper request timed out'))
+    })
+
+    req.write(fullBody)
+    req.end()
+  })
 }
 
 export async function POST(request: NextRequest) {
@@ -53,18 +127,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`Processing recording: format=${format}, size=${audioFile.size} bytes`)
+    console.log(`Processing recording: format=${format}, size=${audioFile.size} bytes, type=${audioFile.type}`)
 
-    // Step 1: Transcribe audio using Whisper
+    // Edge case: Very small audio files (likely empty or noise)
+    if (audioFile.size < MIN_AUDIO_SIZE_BYTES) {
+      return NextResponse.json({
+        transcript: '',
+        output: 'Recording too short to process. Please record for at least a few seconds.',
+      })
+    }
+
+    // Step 1: Transcribe audio using Whisper (native https)
     console.log('Transcribing audio with Whisper...')
-    const transcription = await openai.audio.transcriptions.create({
-      file: audioFile,
-      model: 'whisper-1',
-      language: 'en',
-      response_format: 'text',
-    })
 
-    const transcript = transcription as unknown as string
+    const arrayBuffer = await audioFile.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const filename = audioFile.name || 'recording.m4a'
+    const mimeType = audioFile.type || 'audio/m4a'
+
+    const transcript = await transcribeAudio(buffer, filename, mimeType)
 
     if (!transcript || transcript.trim().length === 0) {
       return NextResponse.json(
@@ -79,20 +160,40 @@ export async function POST(request: NextRequest) {
 
     console.log(`Transcript length: ${transcript.length} characters`)
 
-    // Step 2: If format is transcript, return it directly
+    // Edge case: Truncate very long transcripts to avoid token limits
+    let processedTranscript = transcript
+    if (transcript.length > MAX_TRANSCRIPT_CHARS) {
+      console.log(`Truncating transcript from ${transcript.length} to ${MAX_TRANSCRIPT_CHARS} characters`)
+      processedTranscript = transcript.substring(0, MAX_TRANSCRIPT_CHARS) + '... [truncated]'
+    }
+
+    // Step 2: If format is transcript, return it directly (cleaned version)
     if (format === 'transcript') {
+      // For transcript format, still run through GPT for cleanup
+      const cleanupCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: formatPrompts.transcript },
+          { role: 'user', content: processedTranscript },
+        ],
+        temperature: 0.2,
+        max_tokens: 4000,
+      })
+
+      const cleanedTranscript = cleanupCompletion.choices[0]?.message?.content || processedTranscript
+
       return NextResponse.json({
-        transcript,
-        output: transcript,
+        transcript: processedTranscript,
+        output: cleanedTranscript.trim(),
       })
     }
 
-    // Step 3: Generate structured output using GPT
-    console.log(`Generating ${format} with GPT...`)
+    // Step 3: Generate structured output using GPT-4o-mini
+    console.log(`Generating ${format} with GPT-4o-mini...`)
     const prompt = formatPrompts[format]
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -100,11 +201,11 @@ export async function POST(request: NextRequest) {
         },
         {
           role: 'user',
-          content: `Here is the transcript:\n\n${transcript}\n\nGenerate the ${format} based on the instructions.`,
+          content: `Here is the transcript:\n\n${processedTranscript}\n\nGenerate the ${format.replace('_', ' ')} based on the instructions.`,
         },
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 2000,
     })
 
     const output = completion.choices[0]?.message?.content || ''
@@ -113,14 +214,14 @@ export async function POST(request: NextRequest) {
     if (!output || output.trim().length === 0) {
       const emptyMessages: Record<string, string> = {
         summary:
-          "No clear summary detected. This recording didn't contain a clear topic or narrative to summarize.",
+          'Unable to generate a summary. The recording may be too brief or unclear.',
         action_items:
-          'No action items found. Plainly didn\'t detect any tasks, decisions, or next steps in this recording.',
+          'No action items detected in this recording.',
         key_points:
-          'Not enough distinct points. This recording didn\'t contain multiple ideas to extract as key points.',
+          'Unable to extract key points. The recording may be too brief.',
       }
       return NextResponse.json({
-        transcript,
+        transcript: processedTranscript,
         output: emptyMessages[format] || 'Content could not be generated.',
       })
     }
@@ -128,7 +229,7 @@ export async function POST(request: NextRequest) {
     console.log(`Successfully generated ${format}`)
 
     return NextResponse.json({
-      transcript,
+      transcript: processedTranscript,
       output: output.trim(),
     })
   } catch (error: any) {
@@ -144,7 +245,7 @@ export async function POST(request: NextRequest) {
 
     if (error?.status === 429) {
       return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again later.' },
+        { error: 'Rate limit exceeded or quota exceeded. Please check your OpenAI billing.' },
         { status: 429 }
       )
     }

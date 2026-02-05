@@ -46,6 +46,18 @@ There are only two ways to input audio:
 Both paths MUST converge immediately after audio input.
 Do not create parallel logic after this point.
 
+## First-time user flow:
+
+Onboarding CTA → Recording screen
+
+After finishing recording → Choose format -> Result screen
+
+Then → Home
+
+Returning users:
+
+App opens on Home
+
 ---
 
 ## Output Formats (Authoritative)

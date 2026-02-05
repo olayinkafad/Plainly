@@ -1,4 +1,5 @@
 import { OutputType } from '../types'
+import { API_ENDPOINTS } from './config'
 
 export interface ProcessRecordingRequest {
   audioUri: string
@@ -12,40 +13,96 @@ export interface ProcessRecordingResponse {
 }
 
 /**
- * Mock processRecording: Returns dummy data for frontend testing
- * TODO: Replace with real API call when backend is ready
+ * Process a recording through the backend API
+ * 1. Sends audio file to backend
+ * 2. Backend transcribes with Whisper
+ * 3. Backend generates structured output with GPT-4o-mini
  */
 export async function processRecording(
   audioUri: string,
   format: OutputType
 ): Promise<ProcessRecordingResponse> {
-  // Simulate API processing delay (1-2 seconds)
-  await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000))
+  try {
+    // Fetch the audio file from the local URI
+    const audioResponse = await fetch(audioUri)
+    if (!audioResponse.ok) {
+      throw new Error('Failed to read audio file')
+    }
 
-  // Mock transcript (same for all formats)
-  const mockTranscript = `This is a sample transcript of the recording. The user spoke about various topics including project planning, team collaboration, and upcoming deadlines. They mentioned several action items that need to be completed by the end of the week. The discussion covered key points about improving workflow efficiency and communication strategies.`
+    const audioBlob = await audioResponse.blob()
 
-  // Generate format-specific mock output
-  const mockOutputs: Record<OutputType, string> = {
-    transcript: mockTranscript,
-    
-    summary: `This recording covers a discussion about project planning and team collaboration. The conversation focused on improving workflow efficiency, setting deadlines, and enhancing communication strategies. Key themes include project management, team coordination, and productivity improvements.`,
-    
-    action_items: `1. Complete project planning documentation by Friday
-2. Schedule team collaboration meeting for next week
-3. Review and update workflow efficiency processes
-4. Implement new communication strategy
-5. Finalize deadlines for upcoming projects`,
-    
-    key_points: `• Project planning and team collaboration are priorities
-• Workflow efficiency needs improvement
-• Communication strategies require enhancement
-• Deadlines need to be established and tracked
-• Team coordination is essential for success`,
+    // Create FormData with audio file and format
+    const formData = new FormData()
+
+    // Determine file extension from URI or default to m4a (iOS default)
+    const extension = audioUri.split('.').pop()?.toLowerCase() || 'm4a'
+    const mimeType = getMimeType(extension)
+    const filename = `recording.${extension}`
+
+    // Append the audio file
+    formData.append('audio', {
+      uri: audioUri,
+      type: mimeType,
+      name: filename,
+    } as any)
+
+    formData.append('format', format)
+
+    // Send to backend
+    const response = await fetch(API_ENDPOINTS.processRecording, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        // Don't set Content-Type - let fetch set it with boundary for FormData
+      },
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      // Return error in the expected format
+      return {
+        transcript: '',
+        output: '',
+        error: data.error || `Server error: ${response.status}`,
+      }
+    }
+
+    return {
+      transcript: data.transcript || '',
+      output: data.output || '',
+    }
+  } catch (error) {
+    console.error('Error processing recording:', error)
+
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('Network')) {
+      return {
+        transcript: '',
+        output: '',
+        error: 'Unable to connect to server. Please check your connection.',
+      }
+    }
+
+    return {
+      transcript: '',
+      output: '',
+      error: error instanceof Error ? error.message : 'Failed to process recording',
+    }
   }
+}
 
-  return {
-    transcript: mockTranscript,
-    output: mockOutputs[format],
+/**
+ * Get MIME type from file extension
+ */
+function getMimeType(extension: string): string {
+  const mimeTypes: Record<string, string> = {
+    m4a: 'audio/m4a',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    webm: 'audio/webm',
+    ogg: 'audio/ogg',
+    aac: 'audio/aac',
   }
+  return mimeTypes[extension] || 'audio/m4a'
 }

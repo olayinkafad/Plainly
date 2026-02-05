@@ -69,8 +69,14 @@ export default function Generating() {
       }
       setRecording(loadedRecording)
 
-      // Process recording with mock API
+      // Process recording with real API
       const result = await processRecording(loadedRecording.audioBlobUrl, format)
+
+      // Check for API errors
+      if (result.error) {
+        setError(result.error)
+        return
+      }
 
       // If transcript format, also save transcript
       const outputs: Partial<Record<OutputType, string>> = {
@@ -101,20 +107,22 @@ export default function Generating() {
       router.replace(`/recordings/${recordingId}`)
     } catch (error: any) {
       console.error('Failed to generate output:', error)
-      
+
       // Handle specific error messages
       let errorMessage = 'Something went wrong. Please try again.'
-      
-      if (error?.message?.includes('API error')) {
-        errorMessage = 'Unable to connect to server. Please check your internet connection.'
+
+      if (error?.message?.includes('Network') || error?.message?.includes('connect')) {
+        errorMessage = 'Unable to connect to server. Please check your internet connection and make sure the backend is running.'
       } else if (error?.message?.includes('No speech detected')) {
         errorMessage = 'No speech was detected in the recording. Please try recording again.'
       } else if (error?.message?.includes('Rate limit')) {
         errorMessage = 'Too many requests. Please wait a moment and try again.'
+      } else if (error?.message?.includes('too short')) {
+        errorMessage = 'Recording is too short. Please record for at least a few seconds.'
       } else if (error?.message) {
         errorMessage = error.message
       }
-      
+
       setError(errorMessage)
     }
   }
@@ -138,6 +146,14 @@ export default function Generating() {
               style={styles.retryButton}
             >
               Try again
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              Go back
             </Button>
           </View>
         </View>
@@ -207,5 +223,9 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     maxWidth: 300,
+  },
+  backButton: {
+    maxWidth: 300,
+    marginTop: 12,
   },
 })
