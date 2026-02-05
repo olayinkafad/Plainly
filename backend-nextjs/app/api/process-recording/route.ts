@@ -17,10 +17,10 @@ const MAX_TRANSCRIPT_CHARS = 50000 // Truncate very long transcripts to avoid to
 // Format-specific prompts - designed to handle edge cases gracefully
 const formatPrompts: Record<string, string> = {
   transcript:
-    'Clean up this transcript by removing filler words (um, uh, like, you know) when they appear repeatedly. Keep the meaning intact. If the content is very short or unclear, return it as-is with no changes.',
+    'Transform this transcript into a structured JSON format. Rules: Do NOT add or remove meaning. Do NOT invent speaker labels. Only label speakers if diarization is explicitly available. If diarization is not available, use a single speaker label "User" for all text. Preserve the original language and phrasing. Break into short segments (1-3 sentences each). Only remove obvious filler words (um, uh, like, you know) if they do not change meaning (be conservative). Return ONLY valid JSON in this exact format: {"format":"transcript","language_detected":"string","speaker_separation":"provided"|"not_available","segments":[{"speaker":"string","text":"string"}],"confidence_notes":{"possible_missed_words":boolean,"mixed_language_detected":boolean,"noisy_audio_suspected":boolean,"reason":"string|null"}}',
 
   summary:
-    'Create a clear, concise summary of the main ideas discussed. Focus on key themes and the overall narrative. Be objective and factual. If the content is too brief or lacks a clear topic, return a short summary of whatever was said.',
+    'Transform this transcript into a structured summary JSON. Rules: Do NOT invent facts, names, dates, or decisions. If something is unclear or ambiguous, omit it rather than guessing. Preserve the language of the recording. Return ONLY valid JSON in this exact format: {"format":"summary","language_detected":"string","one_line":"string (max 140 chars)","key_takeaways":["string"],"context":"string|null","confidence_notes":{"possible_missed_words":boolean,"mixed_language_detected":boolean,"noisy_audio_suspected":boolean,"reason":"string|null"}}. one_line: a single clear sentence (max 140 characters). key_takeaways: 3-6 short bullets, each focused on one idea. context: only include if it genuinely adds clarity; otherwise null. confidence_notes.reason: short, human explanation only if one of the booleans is true.',
 
   action_items:
     'Extract all tasks, decisions, and next steps mentioned. Format as a numbered list. Only include items explicitly stated as actions or decisions. If no action items are found, return exactly: "No action items detected in this recording."',
@@ -167,24 +167,65 @@ export async function POST(request: NextRequest) {
       processedTranscript = transcript.substring(0, MAX_TRANSCRIPT_CHARS) + '... [truncated]'
     }
 
-    // Step 2: If format is transcript, return it directly (cleaned version)
+    // Step 2: If format is transcript, generate structured JSON
     if (format === 'transcript') {
-      // For transcript format, still run through GPT for cleanup
-      const cleanupCompletion = await openai.chat.completions.create({
+      // Detect language from transcript (simple heuristic: check for common non-English patterns)
+      // For now, default to English; can be enhanced with language detection API
+      const languageDetected = 'en' // TODO: Add proper language detection if needed
+
+      // Generate structured transcript
+      const structuredCompletion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: formatPrompts.transcript },
-          { role: 'user', content: processedTranscript },
+          { role: 'user', content: `Here is the raw transcript:\n\n${processedTranscript}\n\nGenerate the structured transcript JSON.` },
         ],
         temperature: 0.2,
         max_tokens: 4000,
+        response_format: { type: 'json_object' },
       })
 
-      const cleanedTranscript = cleanupCompletion.choices[0]?.message?.content || processedTranscript
+      let structuredTranscript
+      try {
+        const responseText = structuredCompletion.choices[0]?.message?.content || '{}'
+        structuredTranscript = JSON.parse(responseText)
+        
+        // Validate and set defaults
+        if (!structuredTranscript.format) structuredTranscript.format = 'transcript'
+        if (!structuredTranscript.language_detected) structuredTranscript.language_detected = languageDetected
+        if (!structuredTranscript.speaker_separation) structuredTranscript.speaker_separation = 'not_available'
+        if (!Array.isArray(structuredTranscript.segments)) {
+          // Fallback: create single segment with all text
+          structuredTranscript.segments = [{ speaker: 'User', text: processedTranscript }]
+        }
+        if (!structuredTranscript.confidence_notes) {
+          structuredTranscript.confidence_notes = {
+            possible_missed_words: false,
+            mixed_language_detected: false,
+            noisy_audio_suspected: false,
+            reason: null,
+          }
+        }
+      } catch (parseError) {
+        // Fallback: create basic structured format
+        console.error('Failed to parse structured transcript, using fallback:', parseError)
+        structuredTranscript = {
+          format: 'transcript',
+          language_detected: languageDetected,
+          speaker_separation: 'not_available',
+          segments: [{ speaker: 'User', text: processedTranscript }],
+          confidence_notes: {
+            possible_missed_words: false,
+            mixed_language_detected: false,
+            noisy_audio_suspected: false,
+            reason: null,
+          },
+        }
+      }
 
       return NextResponse.json({
         transcript: processedTranscript,
-        output: cleanedTranscript.trim(),
+        output: JSON.stringify(structuredTranscript),
       })
     }
 
@@ -192,6 +233,75 @@ export async function POST(request: NextRequest) {
     console.log(`Generating ${format} with GPT-4o-mini...`)
     const prompt = formatPrompts[format]
 
+    // For summary format, generate structured JSON
+    if (format === 'summary') {
+      const summaryCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: prompt,
+          },
+          {
+            role: 'user',
+            content: `Here is the transcript:\n\n${processedTranscript}\n\nGenerate the structured summary JSON.`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      })
+
+      let structuredSummary
+      try {
+        const responseText = summaryCompletion.choices[0]?.message?.content || '{}'
+        structuredSummary = JSON.parse(responseText)
+        
+        // Validate and set defaults
+        if (!structuredSummary.format) structuredSummary.format = 'summary'
+        if (!structuredSummary.language_detected) structuredSummary.language_detected = 'en'
+        if (!structuredSummary.one_line) structuredSummary.one_line = 'Summary unavailable'
+        if (!Array.isArray(structuredSummary.key_takeaways)) {
+          structuredSummary.key_takeaways = []
+        }
+        if (structuredSummary.context === undefined) structuredSummary.context = null
+        if (!structuredSummary.confidence_notes) {
+          structuredSummary.confidence_notes = {
+            possible_missed_words: false,
+            mixed_language_detected: false,
+            noisy_audio_suspected: false,
+            reason: null,
+          }
+        }
+        // Ensure one_line is max 140 chars
+        if (structuredSummary.one_line.length > 140) {
+          structuredSummary.one_line = structuredSummary.one_line.substring(0, 137) + '...'
+        }
+      } catch (parseError) {
+        // Fallback: create basic structured format
+        console.error('Failed to parse structured summary, using fallback:', parseError)
+        structuredSummary = {
+          format: 'summary',
+          language_detected: 'en',
+          one_line: 'Summary unavailable',
+          key_takeaways: [],
+          context: null,
+          confidence_notes: {
+            possible_missed_words: false,
+            mixed_language_detected: false,
+            noisy_audio_suspected: false,
+            reason: null,
+          },
+        }
+      }
+
+      return NextResponse.json({
+        transcript: processedTranscript,
+        output: JSON.stringify(structuredSummary),
+      })
+    }
+
+    // For other formats (action_items, key_points), use existing logic
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -213,8 +323,6 @@ export async function POST(request: NextRequest) {
     // Handle empty outputs based on format
     if (!output || output.trim().length === 0) {
       const emptyMessages: Record<string, string> = {
-        summary:
-          'Unable to generate a summary. The recording may be too brief or unclear.',
         action_items:
           'No action items detected in this recording.',
         key_points:

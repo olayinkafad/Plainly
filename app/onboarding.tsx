@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, FlatList, Dimensions, NativeScrollEvent, NativeSyntheticEvent, Animated, AccessibilityInfo } from 'react-native'
+import { View, StyleSheet, FlatList, Dimensions, NativeScrollEvent, NativeSyntheticEvent, Animated, AccessibilityInfo, Pressable } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import Button from '../components/Button'
-import { Title, Body, ButtonText } from '../components/typography'
+import { Title, Body } from '../components/typography'
 import AmbientIconBackground from '../components/AmbientIconBackground'
 import Icon from '../components/Icon'
 
@@ -39,6 +38,10 @@ export default function Onboarding() {
   const autoPlayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const illustrationFloatAnim = useRef(new Animated.Value(0)).current
+  
+  // Pulse ring animations
+  const ring1Anim = useRef(new Animated.Value(0)).current
+  const ring2Anim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setPrefersReducedMotion)
@@ -66,6 +69,68 @@ export default function Onboarding() {
     floatAnimation.start()
     return () => floatAnimation.stop()
   }, [prefersReducedMotion])
+
+  // Pulse ring animation
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      ring1Anim.setValue(0)
+      ring2Anim.setValue(0)
+      return
+    }
+
+    const createRingAnimation = (animValue: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(animValue, {
+            toValue: 1,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    }
+
+    // Reset values before starting
+    ring1Anim.setValue(0)
+    ring2Anim.setValue(0)
+
+    const ring1Animation = createRingAnimation(ring1Anim, 0)
+    const ring2Animation = createRingAnimation(ring2Anim, 700)
+
+    ring1Animation.start()
+    ring2Animation.start()
+
+    return () => {
+      ring1Animation.stop()
+      ring2Animation.stop()
+    }
+  }, [prefersReducedMotion, ring1Anim, ring2Anim])
+
+  const ring1Scale = ring1Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.8],
+  })
+
+  const ring1Opacity = ring1Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.25, 0],
+  })
+
+  const ring2Scale = ring2Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.8],
+  })
+
+  const ring2Opacity = ring2Anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.25, 0],
+  })
 
   const illustrationTranslateY = illustrationFloatAnim.interpolate({
     inputRange: [0, 1],
@@ -218,16 +283,50 @@ export default function Onboarding() {
           contentContainerStyle={styles.flatListContent}
         />
 
-        {/* Zone C: Bottom - CTA button fixed to bottom */}
+        {/* Zone C: Bottom - Animated CTA fixed to bottom */}
         <View style={[styles.bottomZone, { paddingBottom: insets.bottom + 16 }]}>
-          <Button variant="primary" fullWidth onPress={() => {
-            router.push('/home?startRecording=true')
-          }}>
-            <View style={styles.buttonContent}>
-              <Icon name="microphone" size={20} color="#FFFFFF" />
-              <ButtonText style={styles.buttonText}>Record your first thought</ButtonText>
+          <Pressable
+            style={styles.ctaContainer}
+            onPress={() => {
+              router.push('/home?startRecording=true')
+            }}
+            accessibilityLabel="Record your first thought"
+            accessibilityRole="button"
+          >
+            {/* Pulse rings */}
+            <View style={styles.pulseContainer}>
+              {!prefersReducedMotion && (
+                <>
+                  <Animated.View
+                    style={[
+                      styles.pulseRing,
+                      {
+                        transform: [{ scale: ring1Scale }],
+                        opacity: ring1Opacity,
+                      },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.pulseRing,
+                      {
+                        transform: [{ scale: ring2Scale }],
+                        opacity: ring2Opacity,
+                      },
+                    ]}
+                  />
+                </>
+              )}
+              {/* Solid circle */}
+              <View style={styles.solidCircle}>
+                <Icon name="microphone" size={24} color="#2563EB" />
+              </View>
             </View>
-          </Button>
+            {/* Label card */}
+            <View style={styles.labelCard}>
+              <Body style={styles.labelText}>Record your first thought</Body>
+            </View>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -325,14 +424,51 @@ const styles = StyleSheet.create({
     paddingTop: 24, // --space-6
     paddingHorizontal: 16, // --space-4
     width: '100%',
+    alignItems: 'center',
   },
-  buttonContent: {
+  ctaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 12, // --space-3
   },
-  buttonText: {
-    color: '#FFFFFF',
+  pulseContainer: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#2563EB', // --color-accent-primary
+  },
+  solidCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#2563EB', // --color-accent-primary
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  labelCard: {
+    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    paddingHorizontal: 16, // --space-4
+    paddingVertical: 12, // --space-3
+    borderRadius: 10, // --radius-md
+    borderWidth: 1,
+    borderColor: '#E5E7EB', // --color-border-default
+  },
+  labelText: {
+    color: '#111827', // --color-text-primary
+    fontSize: 14, // --font-size-sm
+    fontWeight: '500', // --font-weight-medium
   },
 })

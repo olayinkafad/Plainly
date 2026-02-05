@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Title, Body, Meta } from '../components/typography'
 import { recordingsStore, Recording } from '../store/recordings'
-import { OutputType } from '../types'
+import { OutputType, TranscriptOutput, StructuredTranscript, SummaryOutput, StructuredSummary } from '../types'
 import Button from '../components/Button'
 import { processRecording } from '../lib/api'
 
@@ -78,9 +78,40 @@ export default function Generating() {
         return
       }
 
-      // If transcript format, also save transcript
-      const outputs: Partial<Record<OutputType, string>> = {
-        [format]: result.output,
+      // Prepare outputs - handle structured formats
+      const outputs: Partial<Recording['outputs']> = {}
+      
+      if (format === 'transcript') {
+        // Parse structured transcript JSON
+        try {
+          const parsed = JSON.parse(result.output)
+          if (parsed.format === 'transcript' && Array.isArray(parsed.segments)) {
+            outputs.transcript = parsed as StructuredTranscript
+          } else {
+            // Fallback to string if parsing fails or invalid structure
+            outputs.transcript = result.output
+          }
+        } catch {
+          // Not JSON, store as string (backward compatibility)
+          outputs.transcript = result.output
+        }
+      } else if (format === 'summary') {
+        // Parse structured summary JSON
+        try {
+          const parsed = JSON.parse(result.output)
+          if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
+            outputs.summary = parsed as StructuredSummary
+          } else {
+            // Fallback to string if parsing fails or invalid structure
+            outputs.summary = result.output
+          }
+        } catch {
+          // Not JSON, store as string (backward compatibility)
+          outputs.summary = result.output
+        }
+      } else {
+        // Other formats store as string
+        outputs[format] = result.output
       }
 
       // If we got a transcript and format is not transcript, save it for future use

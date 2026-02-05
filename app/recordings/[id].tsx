@@ -14,6 +14,9 @@ import RecordingActionsSheet from '../../components/RecordingActionsSheet'
 import FormatPickerSheet from '../../components/FormatPickerSheet'
 import RenameModal from '../../components/RenameModal'
 import { generateRecordingTitle } from '../../lib/api'
+import TranscriptDisplay from '../../components/TranscriptDisplay'
+import SummaryDisplay from '../../components/SummaryDisplay'
+import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput } from '../../types'
 
 const formatOptions: { key: OutputType; title: string }[] = [
   { key: 'summary', title: 'Summary' },
@@ -42,21 +45,6 @@ export default function RecordingDetail() {
     hasAutoTitledRef.current = false // Reset when recording changes
   }, [id])
 
-  // Also check for auto-title when recording outputs change
-  useEffect(() => {
-    if (
-      recording &&
-      !hasAutoTitledRef.current &&
-      recording.title === 'Recording' &&
-      (recording.outputs.transcript || recording.outputs.summary)
-    ) {
-      hasAutoTitledRef.current = true
-      generateAutoTitle(recording).catch((error) => {
-        console.error('Auto-title generation failed:', error)
-      })
-    }
-  }, [recording?.outputs?.transcript, recording?.outputs?.summary, recording?.id])
-
   const loadRecording = async () => {
     if (!id) return
     try {
@@ -82,19 +70,11 @@ export default function RecordingDetail() {
         }
 
         // Auto-generate title if needed (only once per recording)
-        const hasOutputs = loadedRecording.outputs.transcript || loadedRecording.outputs.summary
-        const shouldGenerate = !hasAutoTitledRef.current && 
-                               loadedRecording.title === 'Recording' && 
-                               hasOutputs
-        
-        console.log('Auto-title check:', {
-          hasAutoTitled: hasAutoTitledRef.current,
-          currentTitle: loadedRecording.title,
-          hasOutputs,
-          shouldGenerate
-        })
-        
-        if (shouldGenerate) {
+        if (
+          !hasAutoTitledRef.current &&
+          loadedRecording.title === 'Recording' &&
+          (loadedRecording.outputs.transcript || loadedRecording.outputs.summary)
+        ) {
           hasAutoTitledRef.current = true
           // Run in background without blocking
           generateAutoTitle(loadedRecording).catch((error) => {
@@ -114,28 +94,42 @@ export default function RecordingDetail() {
   const generateAutoTitle = async (rec: Recording) => {
     try {
       // Prefer summary, fallback to transcript
-      const summary = rec.outputs.summary
-      const transcript = rec.outputs.transcript
+      let summary: string | undefined
+      let transcript: string | undefined
+      
+      // Extract text from structured summary if needed
+      if (rec.outputs.summary) {
+        if (typeof rec.outputs.summary === 'string') {
+          summary = rec.outputs.summary
+        } else {
+          // Structured summary - use one_line as summary text
+          summary = rec.outputs.summary.one_line
+        }
+      }
+      
+      // Extract text from structured transcript if needed
+      if (rec.outputs.transcript) {
+        if (typeof rec.outputs.transcript === 'string') {
+          transcript = rec.outputs.transcript
+        } else {
+          // Structured transcript - extract all text from segments
+          transcript = rec.outputs.transcript.segments.map(s => s.text).join(' ')
+        }
+      }
 
       if (!summary && !transcript) {
-        console.log('No content available for title generation')
         return
       }
 
-      console.log('Generating auto-title for recording:', rec.id)
       const generatedTitle = await generateRecordingTitle(transcript, summary)
-      console.log('Generated title:', generatedTitle)
 
       // Only update if title is still "Recording" (user hasn't renamed it)
       if (generatedTitle && generatedTitle !== 'Recording') {
         const currentRecording = await recordingsStore.getById(rec.id)
         if (currentRecording && currentRecording.title === 'Recording') {
-          console.log('Updating recording title to:', generatedTitle)
           await recordingsStore.update(rec.id, { title: generatedTitle })
           // Update local state to reflect new title
           setRecording({ ...currentRecording, title: generatedTitle })
-        } else {
-          console.log('Title was already changed, not updating')
         }
       }
     } catch (error) {
@@ -221,7 +215,68 @@ export default function RecordingDetail() {
 
   // Helper function to get active format text
   const getActiveFormatText = (formatKey: OutputType, outputs: Recording['outputs']): string => {
-    return outputs[formatKey] || ''
+    const output = outputs[formatKey]
+    if (!output) return ''
+    
+    // Handle structured transcript - convert to plain text for copy/share
+    if (formatKey === 'transcript' && typeof output === 'object') {
+      return output.segments.map(s => `${s.speaker}: ${s.text}`).join('\n\n')
+    }
+    
+    // Handle structured summary - convert to plain text for copy/share
+    if (formatKey === 'summary' && typeof output === 'object') {
+      const parts = [output.one_line]
+      if (output.key_takeaways.length > 0) {
+        parts.push('\n\nKey takeaways:')
+        parts.push(...output.key_takeaways.map(t => `• ${t}`))
+      }
+      if (output.context) {
+        parts.push(`\n\nContext: ${output.context}`)
+      }
+      return parts.join('\n')
+    }
+    
+    return typeof output === 'string' ? output : ''
+  }
+
+  const getStructuredTranscript = (output: TranscriptOutput | undefined): StructuredTranscript | null => {
+    if (!output) return null
+    if (typeof output === 'string') {
+      // Try to parse as JSON (for backward compatibility with old string format)
+      try {
+        const parsed = JSON.parse(output)
+        if (parsed.format === 'transcript' && Array.isArray(parsed.segments)) {
+          return parsed as StructuredTranscript
+        }
+      } catch {
+        // Not JSON, return null to use plain text display
+        return null
+      }
+    }
+    if (typeof output === 'object' && output.format === 'transcript') {
+      return output as StructuredTranscript
+    }
+    return null
+  }
+
+  const getStructuredSummary = (output: SummaryOutput | undefined): StructuredSummary | null => {
+    if (!output) return null
+    if (typeof output === 'string') {
+      // Try to parse as JSON (for backward compatibility with old string format)
+      try {
+        const parsed = JSON.parse(output)
+        if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
+          return parsed as StructuredSummary
+        }
+      } catch {
+        // Not JSON, return null to use plain text display
+        return null
+      }
+    }
+    if (typeof output === 'object' && output.format === 'summary') {
+      return output as StructuredSummary
+    }
+    return null
   }
 
   const handleCopy = async () => {
@@ -361,6 +416,15 @@ export default function RecordingDetail() {
   }
 
   const output = recording.outputs[activeFormat]
+  // Convert structured formats to displayable format for checks
+  let outputText = ''
+  if (activeFormat === 'transcript' && typeof output === 'object') {
+    outputText = output.segments.map(s => s.text).join(' ')
+  } else if (activeFormat === 'summary' && typeof output === 'object') {
+    outputText = output.one_line
+  } else {
+    outputText = typeof output === 'string' ? output : ''
+  }
   const availableFormats = getAvailableFormats(recording)
   const remainingFormats = formatOptions
     .map((opt) => opt.key)
@@ -433,7 +497,7 @@ export default function RecordingDetail() {
       {/* Content Area - Only this scrolls */}
       <View style={styles.contentWrapper}>
         {/* Action Buttons - Top Right */}
-        {output && output.trim() && (
+        {outputText && outputText.trim() && (
           <View style={styles.actionButtonsContainer}>
             <Pressable
               style={styles.actionButton}
@@ -460,9 +524,29 @@ export default function RecordingDetail() {
           style={styles.contentScrollView}
           contentContainerStyle={styles.contentScrollContent}
         >
-          {output && output.trim() ? (
+          {outputText && outputText.trim() ? (
             <View style={styles.contentContainer}>
-              <Body style={styles.outputText}>{output}</Body>
+              {activeFormat === 'transcript' ? (
+                (() => {
+                  const structuredTranscript = getStructuredTranscript(recording.outputs.transcript)
+                  return structuredTranscript ? (
+                    <TranscriptDisplay transcript={structuredTranscript} />
+                  ) : (
+                    <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                  )
+                })()
+              ) : activeFormat === 'summary' ? (
+                (() => {
+                  const structuredSummary = getStructuredSummary(recording.outputs.summary)
+                  return structuredSummary ? (
+                    <SummaryDisplay summary={structuredSummary} />
+                  ) : (
+                    <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                  )
+                })()
+              ) : (
+                <Body style={styles.outputText}>{output}</Body>
+              )}
             </View>
           ) : (
           <View style={styles.emptyContentContainer}>

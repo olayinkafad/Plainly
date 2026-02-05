@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { OutputType } from '../types'
+import { OutputType, TranscriptOutput, SummaryOutput } from '../types'
 
 export interface Recording {
   id: string
@@ -8,10 +8,10 @@ export interface Recording {
   durationSec: number
   audioBlobUrl: string
   outputs: {
-    summary?: string
+    summary?: SummaryOutput
     action_items?: string
     key_points?: string
-    transcript?: string
+    transcript?: TranscriptOutput
   }
   lastViewedFormat?: OutputType
 }
