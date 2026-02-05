@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { View, StyleSheet, ScrollView, Pressable, Share, Alert } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,6 +13,7 @@ import AudioPlayer from '../../components/AudioPlayer'
 import RecordingActionsSheet from '../../components/RecordingActionsSheet'
 import FormatPickerSheet from '../../components/FormatPickerSheet'
 import RenameModal from '../../components/RenameModal'
+import { generateRecordingTitle } from '../../lib/api'
 
 const formatOptions: { key: OutputType; title: string }[] = [
   { key: 'summary', title: 'Summary' },
@@ -33,11 +34,28 @@ export default function RecordingDetail() {
   const [showFormatPicker, setShowFormatPicker] = useState(false)
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const hasAutoTitledRef = useRef(false)
 
   useEffect(() => {
     loadRecording()
     setIsGenerating(false) // Reset generating state when component mounts/remounts
+    hasAutoTitledRef.current = false // Reset when recording changes
   }, [id])
+
+  // Also check for auto-title when recording outputs change
+  useEffect(() => {
+    if (
+      recording &&
+      !hasAutoTitledRef.current &&
+      recording.title === 'Recording' &&
+      (recording.outputs.transcript || recording.outputs.summary)
+    ) {
+      hasAutoTitledRef.current = true
+      generateAutoTitle(recording).catch((error) => {
+        console.error('Auto-title generation failed:', error)
+      })
+    }
+  }, [recording?.outputs?.transcript, recording?.outputs?.summary, recording?.id])
 
   const loadRecording = async () => {
     if (!id) return
@@ -62,6 +80,27 @@ export default function RecordingDetail() {
             setActiveFormat('summary')
           }
         }
+
+        // Auto-generate title if needed (only once per recording)
+        const hasOutputs = loadedRecording.outputs.transcript || loadedRecording.outputs.summary
+        const shouldGenerate = !hasAutoTitledRef.current && 
+                               loadedRecording.title === 'Recording' && 
+                               hasOutputs
+        
+        console.log('Auto-title check:', {
+          hasAutoTitled: hasAutoTitledRef.current,
+          currentTitle: loadedRecording.title,
+          hasOutputs,
+          shouldGenerate
+        })
+        
+        if (shouldGenerate) {
+          hasAutoTitledRef.current = true
+          // Run in background without blocking
+          generateAutoTitle(loadedRecording).catch((error) => {
+            console.error('Auto-title generation failed:', error)
+          })
+        }
       } else {
         setRecording(null)
       }
@@ -69,6 +108,39 @@ export default function RecordingDetail() {
       console.error('Failed to load recording:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const generateAutoTitle = async (rec: Recording) => {
+    try {
+      // Prefer summary, fallback to transcript
+      const summary = rec.outputs.summary
+      const transcript = rec.outputs.transcript
+
+      if (!summary && !transcript) {
+        console.log('No content available for title generation')
+        return
+      }
+
+      console.log('Generating auto-title for recording:', rec.id)
+      const generatedTitle = await generateRecordingTitle(transcript, summary)
+      console.log('Generated title:', generatedTitle)
+
+      // Only update if title is still "Recording" (user hasn't renamed it)
+      if (generatedTitle && generatedTitle !== 'Recording') {
+        const currentRecording = await recordingsStore.getById(rec.id)
+        if (currentRecording && currentRecording.title === 'Recording') {
+          console.log('Updating recording title to:', generatedTitle)
+          await recordingsStore.update(rec.id, { title: generatedTitle })
+          // Update local state to reflect new title
+          setRecording({ ...currentRecording, title: generatedTitle })
+        } else {
+          console.log('Title was already changed, not updating')
+        }
+      }
+    } catch (error) {
+      // Silently fail - keep "Recording" as title
+      console.error('Failed to auto-generate title:', error)
     }
   }
 

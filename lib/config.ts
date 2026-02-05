@@ -12,4 +12,11 @@ export const API_BASE_URL = __DEV__
 
 export const API_ENDPOINTS = {
   processRecording: `${API_BASE_URL}/api/process-recording`,
+  generateTitle: `${API_BASE_URL}/api/generate-title`,
 }
+
+// #region agent log
+if (typeof fetch !== 'undefined') {
+  fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/config.ts:16',message:'API config loaded',data:{apiBaseUrl:API_BASE_URL,isDev:__DEV__,generateTitleEndpoint:API_ENDPOINTS.generateTitle},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+}
+// #endregion

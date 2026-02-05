@@ -187,6 +187,59 @@ app.post('/api/process-recording', upload.single('audio'), async (req, res) => {
   }
 })
 
+// Generate recording title endpoint
+app.post('/api/generate-title', express.json(), async (req, res) => {
+  try {
+    const { transcript, summary } = req.body
+
+    if (!transcript && !summary) {
+      return res.status(400).json({ error: 'Either transcript or summary is required' })
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' })
+    }
+
+    // Use summary if available, otherwise use transcript
+    const content = summary || transcript
+
+    // Truncate content if too long (to save tokens)
+    const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + '...' : content
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'Generate a short, human-friendly title (2-6 words) for this recording. Rules: No "Transcript of..." or "Summary of...". Avoid dates unless explicitly mentioned and important. If content is very short or unclear, return "Quick note". If multiple topics with no clear theme, return "Mixed notes". Return ONLY the title, nothing else.',
+        },
+        {
+          role: 'user',
+          content: `Content:\n\n${truncatedContent}\n\nGenerate a title:`,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 20,
+    })
+
+    const title = completion.choices[0]?.message?.content?.trim() || 'Quick note'
+
+    // Clean up title - remove quotes if present, limit length
+    let cleanTitle = title.replace(/^["']|["']$/g, '').trim()
+    if (cleanTitle.length > 50) {
+      cleanTitle = cleanTitle.substring(0, 50).trim()
+    }
+    if (!cleanTitle || cleanTitle.length === 0) {
+      cleanTitle = 'Quick note'
+    }
+
+    return res.json({ title: cleanTitle })
+  } catch (error) {
+    console.error('Error generating title:', error)
+    return res.status(500).json({ error: error?.message || 'Failed to generate title' })
+  }
+})
+
 // Start server
 if (require.main === module) {
   const server = app.listen(PORT, () => {
