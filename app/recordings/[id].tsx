@@ -16,12 +16,12 @@ import RenameModal from '../../components/RenameModal'
 import { generateRecordingTitle } from '../../lib/api'
 import TranscriptDisplay from '../../components/TranscriptDisplay'
 import SummaryDisplay from '../../components/SummaryDisplay'
-import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput } from '../../types'
+import ActionItemsDisplay from '../../components/ActionItemsDisplay'
+import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput, StructuredActionItems, ActionItemsOutput } from '../../types'
 
 const formatOptions: { key: OutputType; title: string }[] = [
   { key: 'summary', title: 'Summary' },
   { key: 'action_items', title: 'Action items' },
-  { key: 'key_points', title: 'Key points' },
   { key: 'transcript', title: 'Transcript' },
 ]
 
@@ -219,21 +219,44 @@ export default function RecordingDetail() {
     if (!output) return ''
     
     // Handle structured transcript - convert to plain text for copy/share
-    if (formatKey === 'transcript' && typeof output === 'object') {
-      return output.segments.map(s => `${s.speaker}: ${s.text}`).join('\n\n')
+    if (formatKey === 'transcript' && typeof output === 'object' && 'segments' in output) {
+      const transcript = output as StructuredTranscript
+      return transcript.segments.map((s: { speaker: string; text: string }) => `${s.speaker}: ${s.text}`).join('\n\n')
     }
     
     // Handle structured summary - convert to plain text for copy/share
-    if (formatKey === 'summary' && typeof output === 'object') {
-      const parts = [output.one_line]
-      if (output.key_takeaways.length > 0) {
+    if (formatKey === 'summary' && typeof output === 'object' && 'one_line' in output) {
+      const summary = output as StructuredSummary
+      const parts = [summary.one_line]
+      if (summary.key_takeaways.length > 0) {
         parts.push('\n\nKey takeaways:')
-        parts.push(...output.key_takeaways.map(t => `• ${t}`))
+        parts.push(...summary.key_takeaways.map((t: string) => `• ${t}`))
       }
-      if (output.context) {
-        parts.push(`\n\nContext: ${output.context}`)
+      if (summary.context) {
+        parts.push(`\n\nContext: ${summary.context}`)
       }
       return parts.join('\n')
+    }
+    
+    // Handle structured action items - convert to plain text for copy/share
+    if (formatKey === 'action_items' && typeof output === 'object' && 'items' in output) {
+      const actionItems = output as StructuredActionItems
+      if (actionItems.none_found || actionItems.items.length === 0) {
+        return 'No clear action items found.'
+      }
+      return actionItems.items.map((item: { task: string; owner: string | 'unclear' | null; due: string | 'unclear' | null; details: string | null }, index: number) => {
+        const parts = [`${index + 1}. ${item.task}`]
+        if (item.owner) {
+          parts.push(`   Owner: ${item.owner === 'unclear' ? 'Unclear' : item.owner}`)
+        }
+        if (item.due) {
+          parts.push(`   Due: ${item.due === 'unclear' ? 'Unclear' : item.due}`)
+        }
+        if (item.details) {
+          parts.push(`   ${item.details}`)
+        }
+        return parts.join('\n')
+      }).join('\n\n')
     }
     
     return typeof output === 'string' ? output : ''
@@ -275,6 +298,26 @@ export default function RecordingDetail() {
     }
     if (typeof output === 'object' && output.format === 'summary') {
       return output as StructuredSummary
+    }
+    return null
+  }
+
+  const getStructuredActionItems = (output: ActionItemsOutput | undefined): StructuredActionItems | null => {
+    if (!output) return null
+    if (typeof output === 'string') {
+      // Try to parse as JSON (for backward compatibility with old string format)
+      try {
+        const parsed = JSON.parse(output)
+        if (parsed.format === 'action_items' && typeof parsed.none_found === 'boolean' && Array.isArray(parsed.items)) {
+          return parsed as StructuredActionItems
+        }
+      } catch {
+        // Not JSON, return null to use plain text display
+        return null
+      }
+    }
+    if (typeof output === 'object' && output.format === 'action_items') {
+      return output as StructuredActionItems
     }
     return null
   }
@@ -344,12 +387,7 @@ export default function RecordingDetail() {
       action_items: {
         title: 'No action items found',
         body: "Plainly didn't detect any tasks, decisions, or next steps in this recording.",
-        suggestion: 'Try Summary or Key points for reflective content.',
-      },
-      key_points: {
-        title: 'Not enough distinct points',
-        body: "This recording didn't contain multiple ideas to extract as key points.",
-        suggestion: 'Summary or Transcript may be a better fit.',
+        suggestion: 'Try Summary or Transcript for reflective content.',
       },
       transcript: {
         title: 'No speech detected',
@@ -418,10 +456,19 @@ export default function RecordingDetail() {
   const output = recording.outputs[activeFormat]
   // Convert structured formats to displayable format for checks
   let outputText = ''
-  if (activeFormat === 'transcript' && typeof output === 'object') {
-    outputText = output.segments.map(s => s.text).join(' ')
-  } else if (activeFormat === 'summary' && typeof output === 'object') {
-    outputText = output.one_line
+  if (activeFormat === 'transcript' && typeof output === 'object' && 'segments' in output) {
+    const transcript = output as StructuredTranscript
+    outputText = transcript.segments.map((s: { speaker: string; text: string }) => s.text).join(' ')
+  } else if (activeFormat === 'summary' && typeof output === 'object' && 'one_line' in output) {
+    const summary = output as StructuredSummary
+    outputText = summary.one_line
+  } else if (activeFormat === 'action_items' && typeof output === 'object' && 'items' in output) {
+    const actionItems = output as StructuredActionItems
+    if (actionItems.none_found || actionItems.items.length === 0) {
+      outputText = 'No clear action items found.'
+    } else {
+      outputText = actionItems.items.map((item: { task: string }) => item.task).join(' ')
+    }
   } else {
     outputText = typeof output === 'string' ? output : ''
   }
@@ -440,16 +487,39 @@ export default function RecordingDetail() {
         >
           <Icon name="caret-left" size={24} color="#111827" />
         </Pressable>
-        <View style={styles.navTitleContainer}>
-          <Title style={styles.navTitle}>{formatRecordingTitle(recording)}</Title>
-          <Meta style={styles.navSubtitle}>{formatRecordingSubtitle(recording)}</Meta>
+        <View style={styles.navSpacer} />
+        <View style={styles.navActionsContainer}>
+          <Pressable
+            style={styles.navActionButton}
+            onPress={handleCopy}
+          >
+            <Icon name="copy" size={20} color="#6B7280" />
+          </Pressable>
+          <Pressable
+            style={styles.navActionButton}
+            onPress={handleShare}
+          >
+            <Icon name="share" size={20} color="#6B7280" />
+          </Pressable>
+          <Pressable
+            style={styles.navActionButton}
+            onPress={handleDownload}
+          >
+            <Icon name="download" size={20} color="#6B7280" />
+          </Pressable>
+          <Pressable
+            style={styles.navButton}
+            onPress={() => setShowActionsSheet(true)}
+          >
+            <Icon name="dots-three-vertical" size={24} color="#111827" />
+          </Pressable>
         </View>
-        <Pressable
-          style={styles.navButton}
-          onPress={() => setShowActionsSheet(true)}
-        >
-          <Icon name="dots-three-vertical" size={24} color="#111827" />
-        </Pressable>
+      </View>
+
+      {/* Title Container Section */}
+      <View style={styles.titleContainer}>
+        <Title style={styles.titleText}>{formatRecordingTitle(recording)}</Title>
+        <Meta style={styles.subtitleText}>{formatRecordingSubtitle(recording)}</Meta>
       </View>
 
       {/* Audio Player Section */}
@@ -496,30 +566,6 @@ export default function RecordingDetail() {
 
       {/* Content Area - Only this scrolls */}
       <View style={styles.contentWrapper}>
-        {/* Action Buttons - Top Right */}
-        {outputText && outputText.trim() && (
-          <View style={styles.actionButtonsContainer}>
-            <Pressable
-              style={styles.actionButton}
-              onPress={handleCopy}
-            >
-              <Icon name="copy" size={18} color="#6B7280" />
-            </Pressable>
-            <Pressable
-              style={styles.actionButton}
-              onPress={handleShare}
-            >
-              <Icon name="share" size={18} color="#6B7280" />
-            </Pressable>
-            <Pressable
-              style={styles.actionButton}
-              onPress={handleDownload}
-            >
-              <Icon name="download" size={18} color="#6B7280" />
-            </Pressable>
-          </View>
-        )}
-
         <ScrollView
           style={styles.contentScrollView}
           contentContainerStyle={styles.contentScrollContent}
@@ -544,8 +590,17 @@ export default function RecordingDetail() {
                     <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
                   )
                 })()
+              ) : activeFormat === 'action_items' ? (
+                (() => {
+                  const structuredActionItems = getStructuredActionItems(recording.outputs.action_items)
+                  return structuredActionItems ? (
+                    <ActionItemsDisplay actionItems={structuredActionItems} />
+                  ) : (
+                    <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                  )
+                })()
               ) : (
-                <Body style={styles.outputText}>{output}</Body>
+                <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
               )}
             </View>
           ) : (
@@ -653,21 +708,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navTitleContainer: {
+  navSpacer: {
     flex: 1,
+  },
+  navActionsContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12, // --space-3
+    gap: 4, // --space-1
   },
-  navTitle: {
-    fontSize: 16,
+  navActionButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleContainer: {
+    paddingHorizontal: 16, // --space-4
+    paddingTop: 16, // --space-4
+    paddingBottom: 16, // --space-4
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9', // --color-border-subtle
+    maxWidth: 420,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  titleText: {
+    fontSize: 20, // --font-size-lg
     color: '#111827', // --color-text-primary
-    textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 4, // --space-1
   },
-  navSubtitle: {
-    fontSize: 12,
+  subtitleText: {
+    fontSize: 12, // --font-size-xs
     color: '#6B7280', // --color-text-secondary
-    textAlign: 'center',
   },
   tabsContainer: {
     borderBottomWidth: 1,
@@ -733,26 +805,11 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
-  actionButtonsContainer: {
-    position: 'absolute',
-    top: 16, // --space-4
-    right: 16, // --space-4
-    flexDirection: 'row',
-    gap: 8, // --space-2
-    zIndex: 10,
-  },
-  actionButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   contentScrollView: {
     flex: 1,
   },
   contentScrollContent: {
     paddingBottom: 80, // Extra padding for floating button
-    paddingTop: 60, // Space for action buttons
   },
   contentContainer: {
     paddingHorizontal: 16, // --space-4
@@ -797,34 +854,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     paddingHorizontal: 16, // --space-4
-  },
-  addFormatButton: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12, // --space-3
-    paddingHorizontal: 16, // --space-4
-    borderRadius: 9999, // Full pill shape
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default (secondary button style)
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3, // Android shadow
-    zIndex: 10, // Ensure button is above content
-  },
-  addFormatButtonDisabled: {
-    opacity: 0.5,
-  },
-  addFormatText: {
-    fontSize: 14,
-    color: '#2563EB', // --color-accent-primary (blue)
-    fontFamily: 'Satoshi-Medium',
-    marginLeft: 6, // --space-1.5 (spacing between icon and text)
-  },
-  addFormatTextDisabled: {
-    color: '#9CA3AF',
   },
 })

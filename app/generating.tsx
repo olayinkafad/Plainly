@@ -4,7 +4,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Title, Body, Meta } from '../components/typography'
 import { recordingsStore, Recording } from '../store/recordings'
-import { OutputType, TranscriptOutput, StructuredTranscript, SummaryOutput, StructuredSummary } from '../types'
+import { OutputType, TranscriptOutput, StructuredTranscript, SummaryOutput, StructuredSummary, ActionItemsOutput, StructuredActionItems } from '../types'
 import Button from '../components/Button'
 import { processRecording } from '../lib/api'
 
@@ -40,10 +40,6 @@ export default function Generating() {
       action_items: {
         title: 'Generating your action items',
         helper: 'Pulling out clear next steps.',
-      },
-      key_points: {
-        title: 'Generating your key points',
-        helper: 'Highlighting the main ideas.',
       },
       transcript: {
         title: 'Generating your transcript',
@@ -109,15 +105,27 @@ export default function Generating() {
           // Not JSON, store as string (backward compatibility)
           outputs.summary = result.output
         }
+      } else if (format === 'action_items') {
+        // Parse structured action items JSON
+        try {
+          const parsed = JSON.parse(result.output)
+          if (parsed.format === 'action_items' && typeof parsed.none_found === 'boolean' && Array.isArray(parsed.items)) {
+            outputs.action_items = parsed as StructuredActionItems
+          } else {
+            // Fallback to string if parsing fails or invalid structure
+            outputs.action_items = result.output
+          }
+        } catch {
+          // Not JSON, store as string (backward compatibility)
+          outputs.action_items = result.output
+        }
       } else {
         // Other formats store as string
         outputs[format] = result.output
       }
 
-      // If we got a transcript and format is not transcript, save it for future use
-      if (format !== 'transcript' && result.transcript) {
-        outputs.transcript = result.transcript
-      }
+      // Only save the requested format - do not save transcript unless explicitly requested
+      // The transcript is an intermediate step but should not be stored unless the user selected it
 
       // Update recording with generated output (preserve existing outputs)
       await recordingsStore.update(recordingId, {

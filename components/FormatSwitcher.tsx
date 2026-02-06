@@ -9,7 +9,6 @@ interface FormatSwitcherProps {
 const formatOptions: { value: OutputType; label: string }[] = [
   { value: 'summary', label: 'Summary' },
   { value: 'action_items', label: 'Action items' },
-  { value: 'key_points', label: 'Key points' },
   { value: 'transcript', label: 'Transcript' },
 ]
 

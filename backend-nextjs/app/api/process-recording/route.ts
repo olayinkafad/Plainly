@@ -23,10 +23,7 @@ const formatPrompts: Record<string, string> = {
     'Transform this transcript into a structured summary JSON. Rules: Do NOT invent facts, names, dates, or decisions. If something is unclear or ambiguous, omit it rather than guessing. Preserve the language of the recording. Return ONLY valid JSON in this exact format: {"format":"summary","language_detected":"string","one_line":"string (max 140 chars)","key_takeaways":["string"],"context":"string|null","confidence_notes":{"possible_missed_words":boolean,"mixed_language_detected":boolean,"noisy_audio_suspected":boolean,"reason":"string|null"}}. one_line: a single clear sentence (max 140 characters). key_takeaways: 3-6 short bullets, each focused on one idea. context: only include if it genuinely adds clarity; otherwise null. confidence_notes.reason: short, human explanation only if one of the booleans is true.',
 
   action_items:
-    'Extract all tasks, decisions, and next steps mentioned. Format as a numbered list. Only include items explicitly stated as actions or decisions. If no action items are found, return exactly: "No action items detected in this recording."',
-
-  key_points:
-    'Extract the most important points and ideas as bullet points. Focus on distinct, meaningful insights. Remove redundancy. If the content is too brief to extract multiple points, return the single main point or state: "Recording too brief to extract key points."',
+    'Extract all tasks, decisions, and next steps mentioned. Rules: Only include tasks that are explicitly stated or clearly implied. Do NOT invent owners, deadlines, or responsibilities. If a task exists but details are missing, mark missing fields as "unclear" or null. If no actions exist, set none_found=true and items=[]. Return ONLY valid JSON in this exact format: {"format":"action_items","language_detected":"string","none_found":boolean,"items":[{"task":"string","owner":"string|\\"unclear\\"|null","due":"string|\\"unclear\\"|null","details":"string|null"}],"confidence_notes":{"possible_missed_words":boolean,"mixed_language_detected":boolean,"noisy_audio_suspected":boolean,"reason":"string|null"}}. task must be verb-first (e.g. "Draft intro", "Follow up with recruiter"). owner: null unless explicitly mentioned. due: keep literal language ("tomorrow", "next week") if present.',
 }
 
 // Custom Whisper transcription using native https (node-fetch has issues on Node 24)
@@ -113,7 +110,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!format || !['transcript', 'summary', 'action_items', 'key_points'].includes(format)) {
+    if (!format || !['transcript', 'summary', 'action_items'].includes(format)) {
       return NextResponse.json(
         { error: 'Invalid format specified' },
         { status: 400 }
@@ -301,44 +298,82 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // For other formats (action_items, key_points), use existing logic
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: prompt,
-        },
-        {
-          role: 'user',
-          content: `Here is the transcript:\n\n${processedTranscript}\n\nGenerate the ${format.replace('_', ' ')} based on the instructions.`,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 2000,
-    })
+    // For action_items format, generate structured JSON
+    if (format === 'action_items') {
+      const actionItemsCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: prompt,
+          },
+          {
+            role: 'user',
+            content: `Here is the transcript:\n\n${processedTranscript}\n\nGenerate the structured action items JSON.`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      })
 
-    const output = completion.choices[0]?.message?.content || ''
-
-    // Handle empty outputs based on format
-    if (!output || output.trim().length === 0) {
-      const emptyMessages: Record<string, string> = {
-        action_items:
-          'No action items detected in this recording.',
-        key_points:
-          'Unable to extract key points. The recording may be too brief.',
+      let structuredActionItems
+      try {
+        const responseText = actionItemsCompletion.choices[0]?.message?.content || '{}'
+        structuredActionItems = JSON.parse(responseText)
+        
+        // Validate and set defaults
+        if (!structuredActionItems.format) structuredActionItems.format = 'action_items'
+        if (!structuredActionItems.language_detected) structuredActionItems.language_detected = 'en'
+        if (structuredActionItems.none_found === undefined) {
+          structuredActionItems.none_found = !Array.isArray(structuredActionItems.items) || structuredActionItems.items.length === 0
+        }
+        if (!Array.isArray(structuredActionItems.items)) {
+          structuredActionItems.items = []
+          structuredActionItems.none_found = true
+        }
+        // Ensure each item has required fields
+        structuredActionItems.items = structuredActionItems.items.map((item: any) => ({
+          task: item.task || '',
+          owner: item.owner ?? null,
+          due: item.due ?? null,
+          details: item.details ?? null,
+        }))
+        if (!structuredActionItems.confidence_notes) {
+          structuredActionItems.confidence_notes = {
+            possible_missed_words: false,
+            mixed_language_detected: false,
+            noisy_audio_suspected: false,
+            reason: null,
+          }
+        }
+      } catch (parseError) {
+        // Fallback: create empty action items structure
+        console.error('Failed to parse structured action items, using fallback:', parseError)
+        structuredActionItems = {
+          format: 'action_items',
+          language_detected: 'en',
+          none_found: true,
+          items: [],
+          confidence_notes: {
+            possible_missed_words: false,
+            mixed_language_detected: false,
+            noisy_audio_suspected: false,
+            reason: null,
+          },
+        }
       }
+
       return NextResponse.json({
         transcript: processedTranscript,
-        output: emptyMessages[format] || 'Content could not be generated.',
+        output: JSON.stringify(structuredActionItems),
       })
     }
 
-    console.log(`Successfully generated ${format}`)
-
+    // For other formats, use existing logic (currently none, but keeping for future)
     return NextResponse.json({
       transcript: processedTranscript,
-      output: output.trim(),
+      output: 'Format not yet implemented.',
     })
   } catch (error: any) {
     console.error('Error processing recording:', error)

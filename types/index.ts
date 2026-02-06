@@ -1,7 +1,6 @@
 export type OutputType = 
   | 'action_items'
   | 'summary'
-  | 'key_points'
   | 'transcript'
 
 export interface TranscriptSegment {
@@ -43,3 +42,27 @@ export interface StructuredSummary {
 }
 
 export type SummaryOutput = string | StructuredSummary
+
+export interface ActionItemConfidenceNotes {
+  possible_missed_words: boolean
+  mixed_language_detected: boolean
+  noisy_audio_suspected: boolean
+  reason: string | null
+}
+
+export interface ActionItem {
+  task: string
+  owner: string | 'unclear' | null
+  due: string | 'unclear' | null
+  details: string | null
+}
+
+export interface StructuredActionItems {
+  format: 'action_items'
+  language_detected: string
+  none_found: boolean
+  items: ActionItem[]
+  confidence_notes: ActionItemConfidenceNotes
+}
+
+export type ActionItemsOutput = string | StructuredActionItems

@@ -62,11 +62,10 @@ App opens on Home
 
 ## Output Formats (Authoritative)
 
-Plainly supports exactly four formats:
+Plainly supports exactly three formats:
 
 - summary
 - action_items
-- key_points
 - transcript
 
 Rules:
@@ -139,7 +138,7 @@ Rules:
 If a change:
 - makes output clearer → do it
 - adds configuration or choice → question it
-- adds backend state → avoid it
+
 
 Clarity is the product.
 

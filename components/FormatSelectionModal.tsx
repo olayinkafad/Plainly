@@ -27,11 +27,6 @@ const formatOptions: FormatOption[] = [
     helper: 'Clear next steps you can act on.',
   },
   {
-    key: 'key_points',
-    title: 'Key points',
-    helper: 'The main ideas, broken into bullet points.',
-  },
-  {
     key: 'transcript',
     title: 'Full transcript',
     helper: 'Everything you said, written out word for word.',
@@ -284,7 +279,6 @@ export default function FormatSelectionModal({
     const formatMap: Record<OutputType, string> = {
       summary: 'Summary',
       action_items: 'Action items',
-      key_points: 'Key points',
       transcript: 'Transcript',
     }
     return formatMap[format]

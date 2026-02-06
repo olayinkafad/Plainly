@@ -23,11 +23,6 @@ const formatOptions: { value: OutputType; label: string; helper: string }[] = [
     helper: 'Tasks and next steps',
   },
   {
-    value: 'key_points',
-    label: 'Key points',
-    helper: 'Important ideas, easy to scan',
-  },
-  {
     value: 'transcript',
     label: 'Transcript',
     helper: 'Word-for-word text',

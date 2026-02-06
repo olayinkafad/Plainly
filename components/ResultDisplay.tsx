@@ -19,7 +19,6 @@ interface ResultDisplayProps {
 const formatLabels: Record<OutputType, string> = {
   summary: 'Summary',
   action_items: 'Action items',
-  key_points: 'Key points',
   transcript: 'Transcript',
 }
 
@@ -35,7 +34,7 @@ export default function ResultDisplay({
   onFormatChange,
   copied,
 }: ResultDisplayProps) {
-  const allFormats: OutputType[] = ['summary', 'action_items', 'key_points', 'transcript']
+  const allFormats: OutputType[] = ['summary', 'action_items', 'transcript']
   const secondaryFormats = allFormats.filter((f) => f !== activeFormat)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentDuration, setCurrentDuration] = useState(audioDuration)

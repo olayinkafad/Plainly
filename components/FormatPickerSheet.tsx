@@ -24,11 +24,6 @@ const formatOptions: FormatOption[] = [
     helper: 'Tasks and next steps pulled from what you said.',
   },
   {
-    key: 'key_points',
-    title: 'Key points',
-    helper: 'The most important bullets, without the fluff.',
-  },
-  {
     key: 'transcript',
     title: 'Transcript',
     helper: 'Word-for-word text from the recording.',
@@ -92,7 +87,6 @@ export default function FormatPickerSheet({
     const formatMap: Record<OutputType, string> = {
       summary: 'Summary',
       action_items: 'Action items',
-      key_points: 'Key points',
       transcript: 'Transcript',
     }
     return formatMap[format]
