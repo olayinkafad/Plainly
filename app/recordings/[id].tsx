@@ -377,25 +377,95 @@ export default function RecordingDetail() {
     }
   }
 
-  const getEmptyStateContent = (format: OutputType) => {
-    const emptyStates = {
-      summary: {
-        title: 'No clear summary detected',
-        body: "This recording didn't contain a clear topic or narrative to summarize.",
-        suggestion: 'Try Key points or Transcript instead.',
-      },
-      action_items: {
-        title: 'No action items found',
-        body: "Plainly didn't detect any tasks, decisions, or next steps in this recording.",
-        suggestion: 'Try Summary or Transcript for reflective content.',
-      },
-      transcript: {
-        title: 'No speech detected',
-        body: "Plainly couldn't detect clear speech in this recording.",
-        suggestion: 'Try recording again in a quieter environment.',
-      },
+  // Check if a format output is unavailable/empty/invalid
+  const isFormatUnavailable = (format: OutputType, output: any): boolean => {
+    if (!output) return true
+    
+    // Check for string outputs
+    if (typeof output === 'string') {
+      // Check for explicit failure messages
+      const failureIndicators = ['failed', 'error', 'unavailable', 'could not', 'unable to']
+      const lowerOutput = output.toLowerCase()
+      if (failureIndicators.some(indicator => lowerOutput.includes(indicator))) {
+        return true
+      }
+      // Check if effectively empty
+      if (!output.trim() || output.trim().length === 0) {
+        return true
+      }
+      return false
     }
-    return emptyStates[format]
+    
+    // Check structured outputs
+    if (typeof output === 'object') {
+      // Summary
+      if (format === 'summary' && output.format === 'summary') {
+        if (!output.one_line || !output.one_line.trim()) return true
+        if (!Array.isArray(output.key_takeaways) || output.key_takeaways.length === 0) return true
+        return false
+      }
+      
+      // Action items
+      if (format === 'action_items' && output.format === 'action_items') {
+        if (output.none_found === true) return true
+        if (!Array.isArray(output.items) || output.items.length === 0) return true
+        // Check if all items have empty tasks
+        if (output.items.every((item: any) => !item.task || !item.task.trim())) return true
+        return false
+      }
+      
+      // Transcript
+      if (format === 'transcript' && output.format === 'transcript') {
+        if (!Array.isArray(output.segments) || output.segments.length === 0) return true
+        // Check if all segments have empty text
+        if (output.segments.every((seg: any) => !seg.text || !seg.text.trim())) return true
+        return false
+      }
+    }
+    
+    return false
+  }
+
+  // Get confidence notes from structured output
+  const getConfidenceNotes = (format: OutputType, output: any) => {
+    if (typeof output === 'object' && output.confidence_notes) {
+      return output.confidence_notes
+    }
+    return null
+  }
+
+  const getEmptyStateContent = (format: OutputType, output?: any) => {
+    const confidenceNotes = output ? getConfidenceNotes(format, output) : null
+    
+    // Determine body message based on confidence notes
+    let bodyMessage = "This recording didn't include enough information."
+    if (confidenceNotes) {
+      if (confidenceNotes.possible_missed_words || confidenceNotes.noisy_audio_suspected) {
+        bodyMessage = "Parts of the recording may have been hard to hear."
+      } else if (confidenceNotes.mixed_language_detected) {
+        bodyMessage = "Mixed languages can be harder to capture perfectly."
+      }
+    }
+    
+    // Format-specific titles
+    const titles: Record<OutputType, string> = {
+      summary: "Not enough to summarise",
+      action_items: "No clear action items found",
+      transcript: "We couldn't transcribe this clearly",
+    }
+    
+    // Base title for general cases
+    const baseTitle = "We couldn't create this just yet"
+    
+    return {
+      title: titles[format] || baseTitle,
+      body: bodyMessage,
+      suggestion: format === 'action_items' 
+        ? 'Try Summary or Transcript instead.'
+        : format === 'summary'
+        ? 'Try Action items or Transcript instead.'
+        : 'Try Summary or Action items instead.',
+    }
   }
 
   const handleFormatSwitch = (format: OutputType) => {
@@ -507,12 +577,12 @@ export default function RecordingDetail() {
           >
             <Icon name="download" size={20} color="#6B7280" />
           </Pressable>
-          <Pressable
-            style={styles.navButton}
-            onPress={() => setShowActionsSheet(true)}
-          >
-            <Icon name="dots-three-vertical" size={24} color="#111827" />
-          </Pressable>
+        <Pressable
+          style={styles.navButton}
+          onPress={() => setShowActionsSheet(true)}
+        >
+          <Icon name="dots-three-vertical" size={24} color="#111827" />
+        </Pressable>
         </View>
       </View>
 
@@ -570,56 +640,61 @@ export default function RecordingDetail() {
           style={styles.contentScrollView}
           contentContainerStyle={styles.contentScrollContent}
         >
-          {outputText && outputText.trim() ? (
-            <View style={styles.contentContainer}>
-              {activeFormat === 'transcript' ? (
-                (() => {
-                  const structuredTranscript = getStructuredTranscript(recording.outputs.transcript)
-                  return structuredTranscript ? (
-                    <TranscriptDisplay transcript={structuredTranscript} />
-                  ) : (
-                    <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
-                  )
-                })()
-              ) : activeFormat === 'summary' ? (
-                (() => {
-                  const structuredSummary = getStructuredSummary(recording.outputs.summary)
-                  return structuredSummary ? (
-                    <SummaryDisplay summary={structuredSummary} />
-                  ) : (
-                    <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
-                  )
-                })()
-              ) : activeFormat === 'action_items' ? (
-                (() => {
-                  const structuredActionItems = getStructuredActionItems(recording.outputs.action_items)
-                  return structuredActionItems ? (
-                    <ActionItemsDisplay actionItems={structuredActionItems} />
-                  ) : (
-                    <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
-                  )
-                })()
-              ) : (
-                <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
-              )}
-            </View>
-          ) : (
-          <View style={styles.emptyContentContainer}>
             {(() => {
-              const emptyState = getEmptyStateContent(activeFormat)
+            // Check if format is unavailable
+            const isUnavailable = isFormatUnavailable(activeFormat, output)
+            
+            if (isUnavailable) {
+              // Show empty state
+              const emptyState = getEmptyStateContent(activeFormat, output)
               return (
-                <>
+                <View style={styles.emptyContentContainer}>
                   <Title style={styles.emptyTitle}>{emptyState.title}</Title>
                   <Body style={styles.emptyBody}>{emptyState.body}</Body>
                   <Body style={styles.emptySuggestion}>{emptyState.suggestion}</Body>
-                </>
+                </View>
               )
-            })()}
-          </View>
-        )}
-      </ScrollView>
+            }
+            
+            // Show content
+            return (
+              <View style={styles.contentContainer}>
+                {activeFormat === 'transcript' ? (
+                  (() => {
+                    const structuredTranscript = getStructuredTranscript(recording.outputs.transcript)
+                    return structuredTranscript ? (
+                      <TranscriptDisplay transcript={structuredTranscript} />
+                    ) : (
+                      <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                    )
+                  })()
+                ) : activeFormat === 'summary' ? (
+                  (() => {
+                    const structuredSummary = getStructuredSummary(recording.outputs.summary)
+                    return structuredSummary ? (
+                      <SummaryDisplay summary={structuredSummary} />
+                    ) : (
+                      <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                    )
+                  })()
+                ) : activeFormat === 'action_items' ? (
+                  (() => {
+                    const structuredActionItems = getStructuredActionItems(recording.outputs.action_items)
+                    return structuredActionItems ? (
+                      <ActionItemsDisplay actionItems={structuredActionItems} />
+                    ) : (
+                      <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                    )
+                  })()
+                ) : (
+                  <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
+                )}
+              </View>
+            )
+          })()}
+        </ScrollView>
 
-      {/* "Generate new format" Button - Bottom Right of Screen */}
+        {/* "Generate new format" Button - Bottom Right of Screen */}
       {remainingFormats.length > 0 && (
         <Pressable
           style={[

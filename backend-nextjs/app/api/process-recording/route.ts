@@ -13,6 +13,17 @@ const openai = new OpenAI({
 // Constants
 const MIN_AUDIO_SIZE_BYTES = 1000 // ~1KB minimum (very short recordings are likely noise)
 const MAX_TRANSCRIPT_CHARS = 50000 // Truncate very long transcripts to avoid token limits
+const MIN_TRANSCRIPT_LENGTH = 10 // Minimum transcript length to consider valid (prevents hallucination)
+const HALLUCINATION_PATTERNS = [
+  /^thank you for watching$/i,
+  /^you$/i,
+  /^thanks for watching$/i,
+  /^subscribe$/i,
+  /^like and subscribe$/i,
+  /^\.$/,
+  /^,$/,
+  /^thank you$/i,
+] // Common Whisper hallucination patterns
 
 // Format-specific prompts - designed to handle edge cases gracefully
 const formatPrompts: Record<string, string> = {
@@ -27,7 +38,8 @@ const formatPrompts: Record<string, string> = {
 }
 
 // Custom Whisper transcription using native https (node-fetch has issues on Node 24)
-async function transcribeAudio(audioBuffer: Buffer, filename: string, mimeType: string): Promise<string> {
+// Returns both text and segments with timestamps
+async function transcribeAudio(audioBuffer: Buffer, filename: string, mimeType: string): Promise<{ text: string; segments?: Array<{ start: number; end: number; text: string }> }> {
   return new Promise((resolve, reject) => {
     const boundary = '----FormBoundary' + Math.random().toString(16).slice(2)
 
@@ -46,6 +58,9 @@ async function transcribeAudio(audioBuffer: Buffer, filename: string, mimeType: 
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="language"\r\n\r\n` +
       `en\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="response_format"\r\n\r\n` +
+      `verbose_json\r\n` +
       `--${boundary}--\r\n`,
       'utf8'
     )
@@ -69,9 +84,13 @@ async function transcribeAudio(audioBuffer: Buffer, filename: string, mimeType: 
         if (res.statusCode === 200) {
           try {
             const json = JSON.parse(data)
-            resolve(json.text || '')
+            resolve({
+              text: json.text || '',
+              segments: json.segments || undefined,
+            })
           } catch {
-            resolve(data) // If not JSON, return as-is
+            // Fallback: try to extract text if not JSON
+            resolve({ text: data, segments: undefined })
           }
         } else {
           console.error('Whisper API error:', res.statusCode, data)
@@ -142,8 +161,11 @@ export async function POST(request: NextRequest) {
     const filename = audioFile.name || 'recording.m4a'
     const mimeType = audioFile.type || 'audio/m4a'
 
-    const transcript = await transcribeAudio(buffer, filename, mimeType)
+    const transcriptionResult = await transcribeAudio(buffer, filename, mimeType)
+    const transcript = transcriptionResult.text
+    const whisperSegments = transcriptionResult.segments
 
+    // Validate transcript - prevent hallucination
     if (!transcript || transcript.trim().length === 0) {
       return NextResponse.json(
         {
@@ -155,13 +177,54 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`Transcript length: ${transcript.length} characters`)
+    const trimmedTranscript = transcript.trim()
+    
+    // Check for minimum length to prevent hallucination
+    if (trimmedTranscript.length < MIN_TRANSCRIPT_LENGTH) {
+      console.log(`Transcript too short (${trimmedTranscript.length} chars), likely hallucination`)
+      return NextResponse.json(
+        {
+          error: 'No speech detected in recording',
+          transcript: '',
+          output: '',
+        },
+        { status: 400 }
+      )
+    }
+
+    // Check for common hallucination patterns
+    const isHallucination = HALLUCINATION_PATTERNS.some(pattern => pattern.test(trimmedTranscript))
+    if (isHallucination) {
+      console.log(`Transcript matches hallucination pattern: "${trimmedTranscript}"`)
+      return NextResponse.json(
+        {
+          error: 'No speech detected in recording',
+          transcript: '',
+          output: '',
+        },
+        { status: 400 }
+      )
+    }
+
+    console.log(`Transcript length: ${trimmedTranscript.length} characters`)
 
     // Edge case: Truncate very long transcripts to avoid token limits
-    let processedTranscript = transcript
-    if (transcript.length > MAX_TRANSCRIPT_CHARS) {
-      console.log(`Truncating transcript from ${transcript.length} to ${MAX_TRANSCRIPT_CHARS} characters`)
-      processedTranscript = transcript.substring(0, MAX_TRANSCRIPT_CHARS) + '... [truncated]'
+    let processedTranscript = trimmedTranscript
+    if (trimmedTranscript.length > MAX_TRANSCRIPT_CHARS) {
+      console.log(`Truncating transcript from ${trimmedTranscript.length} to ${MAX_TRANSCRIPT_CHARS} characters`)
+      processedTranscript = trimmedTranscript.substring(0, MAX_TRANSCRIPT_CHARS) + '... [truncated]'
+    }
+    
+    // Final validation: ensure we have meaningful content
+    if (!processedTranscript || processedTranscript.trim().length < MIN_TRANSCRIPT_LENGTH) {
+      return NextResponse.json(
+        {
+          error: 'No speech detected in recording',
+          transcript: '',
+          output: '',
+        },
+        { status: 400 }
+      )
     }
 
     // Step 2: If format is transcript, generate structured JSON
@@ -170,12 +233,19 @@ export async function POST(request: NextRequest) {
       // For now, default to English; can be enhanced with language detection API
       const languageDetected = 'en' // TODO: Add proper language detection if needed
 
+      // Prepare user message with transcript and timestamps if available
+      let userMessage = `Here is the raw transcript:\n\n${processedTranscript}\n\n`
+      if (whisperSegments && whisperSegments.length > 0) {
+        userMessage += `Here are the timestamps from the audio:\n${JSON.stringify(whisperSegments.map((s: any) => ({ start: s.start, end: s.end, text: s.text })), null, 2)}\n\n`
+      }
+      userMessage += `Generate the structured transcript JSON with timestamps.`
+
       // Generate structured transcript
       const structuredCompletion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: formatPrompts.transcript },
-          { role: 'user', content: `Here is the raw transcript:\n\n${processedTranscript}\n\nGenerate the structured transcript JSON.` },
+          { role: 'user', content: userMessage },
         ],
         temperature: 0.2,
         max_tokens: 4000,
@@ -192,9 +262,75 @@ export async function POST(request: NextRequest) {
         if (!structuredTranscript.language_detected) structuredTranscript.language_detected = languageDetected
         if (!structuredTranscript.speaker_separation) structuredTranscript.speaker_separation = 'not_available'
         if (!Array.isArray(structuredTranscript.segments)) {
-          // Fallback: create single segment with all text
-          structuredTranscript.segments = [{ speaker: 'User', text: processedTranscript }]
+          // Fallback: create single segment with all text and timestamps
+          // Only if we have valid transcript content (already validated above)
+          if (whisperSegments && whisperSegments.length > 0) {
+            // Use first and last timestamps from Whisper
+            const firstSegment = whisperSegments[0]
+            const lastSegment = whisperSegments[whisperSegments.length - 1]
+            structuredTranscript.segments = [{
+              speaker: 'User',
+              text: processedTranscript,
+              start: firstSegment.start || 0,
+              end: lastSegment.end || 0,
+            }]
+          } else {
+            structuredTranscript.segments = [{
+              speaker: 'User',
+              text: processedTranscript,
+              start: 0,
+              end: 0,
+            }]
+          }
         }
+        
+        // Validate segments have actual content - prevent hallucination
+        if (Array.isArray(structuredTranscript.segments)) {
+          // Filter out empty or invalid segments
+          structuredTranscript.segments = structuredTranscript.segments.filter(
+            (seg: any) => seg && seg.text && seg.text.trim().length >= MIN_TRANSCRIPT_LENGTH
+          )
+          
+          // Ensure all segments have timestamps
+          structuredTranscript.segments = structuredTranscript.segments.map((seg: any) => {
+            if (typeof seg.start !== 'number' || typeof seg.end !== 'number') {
+              // Try to match with Whisper segments if available
+              if (whisperSegments && whisperSegments.length > 0) {
+                // Find matching Whisper segment by text similarity
+                const matchingSegment = whisperSegments.find((ws: any) => 
+                  ws.text && seg.text && ws.text.trim().includes(seg.text.trim().substring(0, 20))
+                )
+                if (matchingSegment) {
+                  return {
+                    ...seg,
+                    start: matchingSegment.start || 0,
+                    end: matchingSegment.end || 0,
+                  }
+                }
+              }
+              // Default to 0 if no match found
+              return {
+                ...seg,
+                start: 0,
+                end: 0,
+              }
+            }
+            return seg
+          })
+          
+          // If no valid segments remain, return error
+          if (structuredTranscript.segments.length === 0) {
+            return NextResponse.json(
+              {
+                error: 'No speech detected in recording',
+                transcript: '',
+                output: '',
+              },
+              { status: 400 }
+            )
+          }
+        }
+        
         if (!structuredTranscript.confidence_notes) {
           structuredTranscript.confidence_notes = {
             possible_missed_words: false,
@@ -205,18 +341,42 @@ export async function POST(request: NextRequest) {
         }
       } catch (parseError) {
         // Fallback: create basic structured format
+        // Only if we have valid transcript content (already validated above)
         console.error('Failed to parse structured transcript, using fallback:', parseError)
-        structuredTranscript = {
-          format: 'transcript',
-          language_detected: languageDetected,
-          speaker_separation: 'not_available',
-          segments: [{ speaker: 'User', text: processedTranscript }],
-          confidence_notes: {
-            possible_missed_words: false,
-            mixed_language_detected: false,
-            noisy_audio_suspected: false,
-            reason: null,
-          },
+        if (processedTranscript && processedTranscript.trim().length >= MIN_TRANSCRIPT_LENGTH) {
+          let startTime = 0
+          let endTime = 0
+          if (whisperSegments && whisperSegments.length > 0) {
+            startTime = whisperSegments[0].start || 0
+            endTime = whisperSegments[whisperSegments.length - 1].end || 0
+          }
+          structuredTranscript = {
+            format: 'transcript',
+            language_detected: languageDetected,
+            speaker_separation: 'not_available',
+            segments: [{
+              speaker: 'User',
+              text: processedTranscript,
+              start: startTime,
+              end: endTime,
+            }],
+            confidence_notes: {
+              possible_missed_words: false,
+              mixed_language_detected: false,
+              noisy_audio_suspected: false,
+              reason: null,
+            },
+          }
+        } else {
+          // Invalid transcript - return error
+          return NextResponse.json(
+            {
+              error: 'No speech detected in recording',
+              transcript: '',
+              output: '',
+            },
+            { status: 400 }
+          )
         }
       }
 

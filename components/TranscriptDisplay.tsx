@@ -25,16 +25,34 @@ export default function TranscriptDisplay({ transcript }: TranscriptDisplayProps
 
       {/* Segments */}
       <View style={styles.segmentsContainer}>
-        {segments.map((segment, index) => (
-          <View key={index} style={styles.segment}>
-            {/* Speaker label - only show if separation is available or multiple speakers */}
-            {speaker_separation === 'provided' && (
-              <Meta style={styles.speakerLabel}>{segment.speaker}</Meta>
-            )}
-            {/* Text content */}
-            <Body style={styles.segmentText}>{segment.text}</Body>
-          </View>
-        ))}
+        {segments.map((segment, index) => {
+          const formatTimestamp = (seconds: number): string => {
+            const hours = Math.floor(seconds / 3600)
+            const minutes = Math.floor((seconds % 3600) / 60)
+            const secs = Math.floor(seconds % 60)
+            
+            if (hours > 0) {
+              return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+            }
+            return `${minutes}:${secs.toString().padStart(2, '0')}`
+          }
+          
+          return (
+            <View key={index} style={styles.segment}>
+              {/* Timestamp and speaker row */}
+              <View style={styles.segmentHeader}>
+                <Meta style={styles.timestamp}>
+                  {formatTimestamp(segment.start)}
+                </Meta>
+                {speaker_separation === 'provided' && (
+                  <Meta style={styles.speakerLabel}>{segment.speaker}</Meta>
+                )}
+              </View>
+              {/* Text content */}
+              <Body style={styles.segmentText}>{segment.text}</Body>
+            </View>
+          )
+        })}
       </View>
     </View>
   )
@@ -63,11 +81,21 @@ const styles = StyleSheet.create({
   segment: {
     marginBottom: 16, // --space-4
   },
+  segmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8, // --space-2
+    marginBottom: 4, // --space-1
+  },
+  timestamp: {
+    color: '#6B7280', // --color-text-secondary
+    fontSize: 11, // Slightly smaller than xs
+    fontFamily: 'Satoshi-Regular',
+  },
   speakerLabel: {
     color: '#6B7280', // --color-text-secondary
     fontSize: 12, // --font-size-xs
     fontWeight: '600',
-    marginBottom: 4, // --space-1
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

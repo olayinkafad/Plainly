@@ -6,6 +6,8 @@ export type OutputType =
 export interface TranscriptSegment {
   speaker: string
   text: string
+  start: number // Start time in seconds
+  end: number // End time in seconds
 }
 
 export interface TranscriptConfidenceNotes {
