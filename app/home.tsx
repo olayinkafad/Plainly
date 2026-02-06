@@ -304,7 +304,11 @@ export default function Home() {
         ) : (
           /* Recordings List State */
           <View style={styles.listContainer}>
-            <Title style={styles.sectionTitle}>Recordings</Title>
+            <Title style={styles.sectionTitle}>
+              {recordings.length === 1 
+                ? 'Your recording (1)' 
+                : `Your recordings (${recordings.length})`}
+            </Title>
             <FlatList
               data={recordings}
               keyExtractor={(item) => item.id}
