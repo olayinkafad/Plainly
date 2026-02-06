@@ -656,22 +656,54 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB', // --color-bg-secondary
     borderWidth: 1,
     borderColor: '#E5E7EB', // --color-border-default
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3, // Android shadow
   },
   stopButton: {
     backgroundColor: '#DC2626', // --color-error (red for destructive action)
     width: 80,
     height: 80,
     borderRadius: 40,
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5, // Android shadow
   },
   pauseButton: {
     backgroundColor: '#F9FAFB', // --color-bg-secondary
     borderWidth: 1,
     borderColor: '#E5E7EB', // --color-border-default
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3, // Android shadow
   },
   resumeButton: {
     backgroundColor: '#F9FAFB', // --color-bg-secondary
     borderWidth: 1,
     borderColor: '#E5E7EB', // --color-border-default
+    shadowColor: '#000000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3, // Android shadow
   },
   controlLabel: {
     color: '#6B7280', // --color-text-secondary
