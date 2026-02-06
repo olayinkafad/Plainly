@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, ScrollView, Pressable, Share, Alert } from 'react-native'
+import { View, StyleSheet, ScrollView, Pressable, Share, Alert, LayoutChangeEvent, Dimensions } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from '../../components/Icon'
@@ -41,6 +41,8 @@ export default function RecordingDetail() {
   const [showFormatActionSheet, setShowFormatActionSheet] = useState(false)
   const [formatActionType, setFormatActionType] = useState<'copy' | 'share' | 'download' | null>(null)
   const hasAutoTitledRef = useRef(false)
+  const tabsScrollViewRef = useRef<ScrollView>(null)
+  const tabLayoutsRef = useRef<Map<OutputType, { x: number; width: number }>>(new Map())
 
   useEffect(() => {
     loadRecording()
@@ -493,6 +495,25 @@ export default function RecordingDetail() {
     recordingsStore.update(recording.id, {
       lastViewedFormat: format,
     }).catch(console.error)
+    
+    // Auto-scroll to selected tab
+    setTimeout(() => {
+      const tabLayout = tabLayoutsRef.current.get(format)
+      if (tabLayout && tabsScrollViewRef.current) {
+        const { x, width } = tabLayout
+        const screenWidth = Dimensions.get('window').width
+        const scrollPosition = x - (screenWidth / 2) + (width / 2)
+        tabsScrollViewRef.current.scrollTo({
+          x: Math.max(0, scrollPosition),
+          animated: true,
+        })
+      }
+    }, 100)
+  }
+  
+  const handleTabLayout = (format: OutputType) => (event: LayoutChangeEvent) => {
+    const { x, width } = event.nativeEvent.layout
+    tabLayoutsRef.current.set(format, { x, width })
   }
 
   const handleAddFormat = (format: OutputType) => {
@@ -628,6 +649,7 @@ export default function RecordingDetail() {
       {/* Format Switcher Tabs */}
       <View style={styles.tabsContainer}>
         <ScrollView
+          ref={tabsScrollViewRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.tabsContent}
@@ -645,6 +667,10 @@ export default function RecordingDetail() {
                   isActive && styles.tabActive,
                 ]}
                 onPress={() => handleFormatSwitch(formatKey)}
+                onLayout={handleTabLayout(formatKey)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={option.title}
               >
                 <Body 
                   style={[
@@ -869,31 +895,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9', // --color-border-subtle
     width: '100%',
+    paddingVertical: 12, // --space-3
   },
   tabsContent: {
     paddingHorizontal: 16, // --space-4
-    paddingRight: 24, // Extra padding to prevent last tab from being cut off
-    alignItems: 'center', // Align tabs vertically
+    paddingRight: 16, // --space-4
+    alignItems: 'center',
+    gap: 8, // --space-2
   },
   tab: {
-    paddingVertical: 12, // --space-3
+    paddingVertical: 8, // --space-2
     paddingHorizontal: 16, // --space-4
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-    marginRight: 8, // --space-2
-    flexShrink: 0, // Prevent tabs from shrinking
-    minWidth: 'auto', // Allow natural width
+    borderRadius: 20, // Pill shape (larger than --radius-lg for full pill)
+    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    borderWidth: 1,
+    borderColor: '#E5E7EB', // --color-border-default
+    minHeight: 36, // Minimum touch target for accessibility
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   tabActive: {
-    borderBottomColor: '#2563EB', // --color-accent-primary
+    backgroundColor: '#2563EB', // --color-accent-primary
+    borderColor: '#2563EB', // --color-accent-primary
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 14, // --font-size-sm
     color: '#6B7280', // --color-text-secondary
     fontFamily: 'Satoshi-Medium',
   },
   tabTextActive: {
-    color: '#2563EB', // --color-accent-primary
+    color: '#FFFFFF', // White text on active pill
   },
   addFormatButton: {
     position: 'absolute',

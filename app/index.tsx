@@ -53,7 +53,7 @@ export default function Index() {
 
         <View style={styles.buttonContainer}>
           <Button variant="primary" fullWidth onPress={() => router.push('/onboarding')}>
-            Get started
+            Get started for free
           </Button>
           <Meta style={styles.reassurance}>No sign-up required</Meta>
         </View>

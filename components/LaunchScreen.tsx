@@ -67,7 +67,7 @@ export default function LaunchScreen() {
         <View className="w-full max-w-sm gap-3">
           {/* Primary button */}
           <Button variant="primary" fullWidth onPress={handleGetStarted}>
-            <Text className="text-white font-medium">Get started</Text>
+            <Text className="text-white font-medium">Get started for free</Text>
           </Button>
 
           {/* Reassurance text - small, low-emphasis */}
