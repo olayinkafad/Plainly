@@ -1,22 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Animated, AccessibilityInfo } from 'react-native'
+import { useEffect, useState } from 'react'
+import { View, StyleSheet, AccessibilityInfo } from 'react-native'
 import { useRouter } from 'expo-router'
 import Button from '../components/Button'
 import { Title, Body, Meta } from '../components/typography'
-import AmbientIconBackground from '../components/AmbientIconBackground'
 import { recordingsStore } from '../store/recordings'
 
 export default function Index() {
   const router = useRouter()
-  const logoSwayAnim = useRef(new Animated.Value(0)).current
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
   const [hasRecordings, setHasRecordings] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setPrefersReducedMotion)
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setPrefersReducedMotion)
-    return () => subscription.remove()
-  }, [])
 
   // Check if user has recordings (returning user) and redirect to home
   useEffect(() => {
@@ -39,32 +30,6 @@ export default function Index() {
     checkRecordings()
   }, [])
 
-  useEffect(() => {
-    if (prefersReducedMotion) return
-
-    const swayAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(logoSwayAnim, {
-          toValue: 1,
-          duration: 5000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(logoSwayAnim, {
-          toValue: 0,
-          duration: 5000,
-          useNativeDriver: true,
-        }),
-      ])
-    )
-    swayAnimation.start()
-    return () => swayAnimation.stop()
-  }, [prefersReducedMotion])
-
-  const logoTranslateX = logoSwayAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-8, 8],
-  })
-
   // Don't render launch screen if checking recordings or if returning user
   if (hasRecordings === null) {
     return null // Still checking
@@ -72,16 +37,10 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <AmbientIconBackground variant="splash" />
       <View style={styles.content}>
-        <Animated.View
-          style={[
-            styles.logo,
-            prefersReducedMotion ? {} : { transform: [{ translateX: logoTranslateX }] },
-          ]}
-        >
+        <View style={styles.logo}>
           <Title style={styles.logoText}>P</Title>
-        </Animated.View>
+        </View>
         
         <View style={styles.textContainer}>
           <Title style={styles.title}>
