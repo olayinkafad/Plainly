@@ -17,6 +17,7 @@ import { generateRecordingTitle } from '../../lib/api'
 import TranscriptDisplay from '../../components/TranscriptDisplay'
 import SummaryDisplay from '../../components/SummaryDisplay'
 import ActionItemsDisplay from '../../components/ActionItemsDisplay'
+import FormatActionSheet from '../../components/FormatActionSheet'
 import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput, StructuredActionItems, ActionItemsOutput } from '../../types'
 
 const formatOptions: { key: OutputType; title: string }[] = [
@@ -37,6 +38,8 @@ export default function RecordingDetail() {
   const [showFormatPicker, setShowFormatPicker] = useState(false)
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showFormatActionSheet, setShowFormatActionSheet] = useState(false)
+  const [formatActionType, setFormatActionType] = useState<'copy' | 'share' | 'download' | null>(null)
   const hasAutoTitledRef = useRef(false)
 
   useEffect(() => {
@@ -322,29 +325,40 @@ export default function RecordingDetail() {
     return null
   }
 
-  const handleCopy = async () => {
-    if (!recording || !activeFormat) return
+  const handleCopy = () => {
+    setFormatActionType('copy')
+    setShowFormatActionSheet(true)
+  }
+
+  const handleCopyFormat = async (format: OutputType) => {
+    if (!recording) return
     
-    const text = getActiveFormatText(activeFormat, recording.outputs)
+    const text = getActiveFormatText(format, recording.outputs)
     if (!text || !text.trim()) return
 
     try {
       await Clipboard.setStringAsync(text)
-      Alert.alert('Copied', 'Text copied to clipboard')
+      const formatTitle = formatOptions.find(opt => opt.key === format)?.title || 'content'
+      Alert.alert('Copied', `Copy ${formatTitle.toLowerCase()}`)
     } catch (error) {
       console.error('Failed to copy:', error)
       Alert.alert('Error', 'Failed to copy text')
     }
   }
 
-  const handleShare = async () => {
-    if (!recording || !activeFormat) return
+  const handleShare = () => {
+    setFormatActionType('share')
+    setShowFormatActionSheet(true)
+  }
+
+  const handleShareFormat = async (format: OutputType) => {
+    if (!recording) return
     
-    const text = getActiveFormatText(activeFormat, recording.outputs)
+    const text = getActiveFormatText(format, recording.outputs)
     if (!text || !text.trim()) return
 
     try {
-      const formatTitle = formatOptions.find(opt => opt.key === activeFormat)?.title || 'Content'
+      const formatTitle = formatOptions.find(opt => opt.key === format)?.title || 'Content'
       await Share.share({
         message: text,
         title: `Plainly — ${formatTitle}`,
@@ -354,23 +368,28 @@ export default function RecordingDetail() {
     }
   }
 
-  const handleDownload = async () => {
-    if (!recording || !activeFormat) return
+  const handleDownload = () => {
+    setFormatActionType('download')
+    setShowFormatActionSheet(true)
+  }
+
+  const handleDownloadFormat = async (format: OutputType) => {
+    if (!recording) return
     
-    const text = getActiveFormatText(activeFormat, recording.outputs)
+    const text = getActiveFormatText(format, recording.outputs)
     if (!text || !text.trim()) return
 
     try {
-      const formatTitle = formatOptions.find(opt => opt.key === activeFormat)?.title || 'content'
+      const formatTitle = formatOptions.find(opt => opt.key === format)?.title || 'content'
       const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm')
-      const filename = `plainly_${recording.id}_${activeFormat}_${timestamp}.txt`
+      const filename = `plainly_${recording.id}_${format}_${timestamp}.txt`
       const fileUri = `${FileSystem.documentDirectory}${filename}`
 
       await FileSystem.writeAsStringAsync(fileUri, text, {
         encoding: FileSystem.EncodingType.UTF8,
       })
 
-      Alert.alert('Saved', 'File saved to Documents')
+      Alert.alert('Saved', `${formatTitle} saved to Documents`)
     } catch (error) {
       console.error('Failed to download:', error)
       Alert.alert('Error', 'Failed to save file')
@@ -542,7 +561,15 @@ export default function RecordingDetail() {
   } else {
     outputText = typeof output === 'string' ? output : ''
   }
+  const isFormatAvailable = !isFormatUnavailable(activeFormat, output)
   const availableFormats = getAvailableFormats(recording)
+  // Get formats that have actual outputs (for action sheet - copy/share/download)
+  const formatsWithOutputs = formatOptions
+    .map((opt) => opt.key)
+    .filter((key) => {
+      const formatOutput = recording.outputs[key]
+      return formatOutput && !isFormatUnavailable(key, formatOutput)
+    })
   const remainingFormats = formatOptions
     .map((opt) => opt.key)
     .filter((key) => !availableFormats.includes(key))
@@ -747,6 +774,28 @@ export default function RecordingDetail() {
           currentTitle={recording.title || format(recording.createdAt, 'MMM d, yyyy')}
           onSave={handleSaveRename}
           onClose={() => setShowRenameModal(false)}
+        />
+      )}
+
+      {/* Format Action Sheet */}
+      {formatActionType && (
+        <FormatActionSheet
+          isOpen={showFormatActionSheet}
+          actionType={formatActionType}
+          availableFormats={formatsWithOutputs}
+          onSelect={(format) => {
+            if (formatActionType === 'copy') {
+              handleCopyFormat(format)
+            } else if (formatActionType === 'share') {
+              handleShareFormat(format)
+            } else if (formatActionType === 'download') {
+              handleDownloadFormat(format)
+            }
+          }}
+          onClose={() => {
+            setShowFormatActionSheet(false)
+            setFormatActionType(null)
+          }}
         />
       )}
     </SafeAreaView>

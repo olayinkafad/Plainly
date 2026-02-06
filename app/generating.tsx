@@ -70,6 +70,27 @@ export default function Generating() {
 
       // Check for API errors
       if (result.error) {
+        // Handle "No speech detected" error specially - navigate to result page with empty state
+        if (result.error.includes('No speech detected')) {
+          // Don't save an output - just set lastViewedFormat so the format shows in tabs
+          // The empty state will be shown because there's no output for this format
+          // This preserves existing outputs and allows other formats to be generated
+          await recordingsStore.update(recordingId, {
+            lastViewedFormat: format,
+          })
+
+          // Enforce minimum loading time
+          const elapsed = Date.now() - startTimeRef.current
+          if (elapsed < MIN_LOADING_TIME) {
+            await new Promise(resolve => setTimeout(resolve, MIN_LOADING_TIME - elapsed))
+          }
+
+          // Navigate to result screen to show edge case empty state
+          router.replace(`/recordings/${recordingId}`)
+          return
+        }
+        
+        // For other errors, show error screen
         setError(result.error)
         return
       }
@@ -147,13 +168,40 @@ export default function Generating() {
     } catch (error: any) {
       console.error('Failed to generate output:', error)
 
-      // Handle specific error messages
+      // Handle "No speech detected" error specially - navigate to result page with empty state
+      if (error?.message?.includes('No speech detected')) {
+        if (!recordingId || !format) return
+        
+        // Load recording again to get latest state
+        const latestRecording = await recordingsStore.getById(recordingId)
+        if (!latestRecording) {
+          setError('Recording not found')
+          return
+        }
+
+        // Don't save an output - just set lastViewedFormat so the format shows in tabs
+        // The empty state will be shown because there's no output for this format
+        // This preserves existing outputs and allows other formats to be generated
+        await recordingsStore.update(recordingId, {
+          lastViewedFormat: format,
+        })
+
+        // Enforce minimum loading time
+        const elapsed = Date.now() - startTimeRef.current
+        if (elapsed < MIN_LOADING_TIME) {
+          await new Promise(resolve => setTimeout(resolve, MIN_LOADING_TIME - elapsed))
+        }
+
+        // Navigate to result screen to show edge case empty state
+        router.replace(`/recordings/${recordingId}`)
+        return
+      }
+
+      // Handle other specific error messages
       let errorMessage = 'Something went wrong. Please try again.'
 
       if (error?.message?.includes('Network') || error?.message?.includes('connect')) {
         errorMessage = 'Unable to connect to server. Please check your internet connection and make sure the backend is running.'
-      } else if (error?.message?.includes('No speech detected')) {
-        errorMessage = 'No speech was detected in the recording. Please try recording again.'
       } else if (error?.message?.includes('Rate limit')) {
         errorMessage = 'Too many requests. Please wait a moment and try again.'
       } else if (error?.message?.includes('too short')) {
