@@ -473,13 +473,13 @@ const styles = StyleSheet.create({
   // Empty State
   emptyState: {
     flex: 1,
-    justifyContent: 'space-between',
+    marginTop: 32,
   },
   emptyContent: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingBottom: 8,
   },
   emptyTitle: {
     textAlign: 'center',
@@ -489,15 +489,15 @@ const styles = StyleSheet.create({
   emptySubtext: {
     textAlign: 'center',
     color: '#6B7280', // --color-text-secondary
-    marginBottom: 40,
+    marginBottom: 12,
   },
   illustrationContainer: {
     width: '100%',
-    maxWidth: 300,
+    maxWidth: 200,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 40,
+    marginBottom: 12,
   },
   illustrationImage: {
     width: '100%',
