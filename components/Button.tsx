@@ -56,7 +56,7 @@ export default function Button({
       {hasStructuredChildren ? (
         children
       ) : (
-        <ButtonText style={textStyle}>{children}</ButtonText>
+      <ButtonText style={textStyle}>{children}</ButtonText>
       )}
     </Pressable>
   )

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, Alert, ScrollView } from 'react-native'
-import { Audio, Recording as ExpoRecording } from 'expo-av'
+import { Audio } from 'expo-av'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, usePathname } from 'expo-router'
 import Icon from './Icon'
@@ -26,11 +26,10 @@ export default function RecordingModal({
   const router = useRouter()
   const pathname = usePathname()
   const insets = useSafeAreaInsets()
-  const [recording, setRecording] = useState<ExpoRecording | null>(null)
+  const [recording, setRecording] = useState<Audio.Recording | null>(null)
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0) // in seconds
   const [hasRecording, setHasRecording] = useState(false)
-  const [permissionError, setPermissionError] = useState<string | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const slideAnim = useRef(new Animated.Value(0)).current
   const hasStartedRef = useRef(false)
@@ -47,6 +46,8 @@ export default function RecordingModal({
         friction: 11,
       }).start()
       hasStartedRef.current = false
+      // Start immediately - cleanup happens in parallel
+      resetRecording()
       requestPermissionsAndStart()
     } else {
       Animated.timing(slideAnim, {
@@ -65,12 +66,18 @@ export default function RecordingModal({
 
   const requestPermissionsAndStart = async () => {
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:65',message:'requestPermissionsAndStart called',data:{hasStarted:hasStartedRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const { status } = await Audio.requestPermissionsAsync()
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:68',message:'Permission status',data:{status,isGranted:status === 'granted'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       if (status !== 'granted') {
-        setPermissionError('Microphone permission is required to record audio.')
+        // Close modal if permission denied - system will handle the permission UI
+        onClose()
         return
       }
-      setPermissionError(null)
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -78,11 +85,17 @@ export default function RecordingModal({
       // Auto-start recording after permissions granted
       if (!hasStartedRef.current) {
         hasStartedRef.current = true
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:80',message:'Calling startRecording',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         await startRecording()
       }
     } catch (error) {
-      setPermissionError('Failed to request microphone permission.')
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:85',message:'Permission error',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       console.error('Permission error:', error)
+      onClose()
     }
   }
 
@@ -90,10 +103,9 @@ export default function RecordingModal({
     try {
       const { status } = await Audio.requestPermissionsAsync()
       if (status !== 'granted') {
-        setPermissionError('Microphone permission is required to record audio.')
+        onClose()
         return false
       }
-      setPermissionError(null)
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -105,19 +117,58 @@ export default function RecordingModal({
       }
       return true
     } catch (error) {
-      setPermissionError('Failed to request microphone permission.')
       console.error('Permission error:', error)
+      onClose()
       return false
     }
   }
 
-  const startRecording = async () => {
+  const startRecording = async (retryCount = 0) => {
     // Guard against duplicate starts
     if (hasStartedRef.current && recording) {
       return
     }
 
+    const MAX_RETRIES = 3
+    const RETRY_DELAYS = [200, 400, 800] // Progressive delays in ms (minimal)
+
     try {
+      // Clean up any existing recording first
+      if (recording) {
+        try {
+          await recording.stopAndUnloadAsync()
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+        setRecording(null)
+      }
+
+      // Reset audio mode to clear any prepared recordings (only if needed)
+      // Skip reset on first attempt to start immediately
+      if (retryCount > 0) {
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playsInSilentModeIOS: false,
+          })
+          // Minimal wait only on retry
+          await new Promise(resolve => setTimeout(resolve, 100))
+        } catch (e) {
+          // Ignore
+        }
+      }
+
+      // Set audio mode for recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      })
+
+      // Minimal delay before creating new recording (only on retry)
+      if (retryCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+
       const { recording: newRecording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       )
@@ -129,8 +180,21 @@ export default function RecordingModal({
       startTimer()
       startWaveformAnimation()
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('Failed to start recording:', error)
-      setPermissionError('Failed to start recording. Please try again.')
+
+      // If it's the "Only one Recording" error and we haven't exceeded retries, retry
+      if (
+        errorMessage.includes('Only one Recording object can be prepared') &&
+        retryCount < MAX_RETRIES
+      ) {
+        const delay = RETRY_DELAYS[retryCount] || 2000
+        console.log(`Retrying recording start after ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return startRecording(retryCount + 1)
+      }
+
+      // If we've exhausted retries or it's a different error, reset the flag
       hasStartedRef.current = false
     }
   }
@@ -141,6 +205,7 @@ export default function RecordingModal({
       await recording.pauseAsync()
       setRecordingState('paused')
       stopTimer()
+      stopWaveformAnimation()
     } catch (error) {
       console.error('Failed to pause recording:', error)
     }
@@ -188,7 +253,6 @@ export default function RecordingModal({
         setRecordingState('idle')
         setDuration(0)
         setHasRecording(false)
-        setPermissionError(null)
         stopTimer()
         stopWaveformAnimation()
         hasStartedRef.current = false
@@ -210,18 +274,30 @@ export default function RecordingModal({
     await saveAndCloseRecording()
   }
 
-  const resetRecording = () => {
+  const resetRecording = async () => {
     if (recording) {
-      recording.stopAndUnloadAsync().catch(console.error)
+      try {
+        await recording.stopAndUnloadAsync()
+      } catch (error) {
+        // Ignore errors
+      }
     }
     setRecording(null)
     setRecordingState('idle')
     setDuration(0)
     setHasRecording(false)
-    setPermissionError(null)
     stopTimer()
     stopWaveformAnimation()
     hasStartedRef.current = false
+    // Reset audio mode
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: false,
+      })
+    } catch (error) {
+      // Ignore
+    }
   }
 
   const startTimer = () => {
@@ -241,6 +317,9 @@ export default function RecordingModal({
   }
 
   const startWaveformAnimation = () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:245',message:'startWaveformAnimation called',data:{waveformAnimationsLength:waveformAnimations.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     const animations = waveformAnimations.map((anim, index) => {
       return Animated.loop(
         Animated.sequence([
@@ -258,6 +337,9 @@ export default function RecordingModal({
       )
     })
     Animated.parallel(animations).start()
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:262',message:'Waveform animations started',data:{animationsCount:animations.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
   }
 
   const stopWaveformAnimation = () => {
@@ -354,23 +436,14 @@ export default function RecordingModal({
               </Pressable>
             </View>
 
-            {/* Permission Error */}
-            {permissionError && (
-              <View style={styles.errorContainer}>
-                <Title style={styles.permissionTitle}>We need your microphone</Title>
-                <Body style={styles.permissionBody}>Plainly works by listening while you think out loud.</Body>
-                <Button
-                  variant="primary"
-                  onPress={requestPermissions}
-                  style={styles.retryButton}
-                >
-                  Allow microphone
-                </Button>
-              </View>
-            )}
-
             {/* Timer */}
             <View style={styles.timerContainer}>
+              {(() => {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:445',message:'Timer render',data:{duration,recordingState,hasRecording},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+                // #endregion
+                return null
+              })()}
               <Title style={styles.timer}>{formatTime(duration)}</Title>
               {recordingState === 'recording' && (
                 <>
@@ -408,14 +481,19 @@ export default function RecordingModal({
 
             {/* Controls */}
             <View style={styles.controls}>
-              <Pressable
-                style={styles.controlButton}
-                onPress={handleCancel}
-              >
-                <Body style={styles.controlButtonText}>Cancel</Body>
-              </Pressable>
+              {/* Left: Cancel */}
+              <View style={styles.controlItem}>
+                <Pressable
+                  style={[styles.controlButton, styles.cancelButton]}
+                  onPress={handleCancel}
+                >
+                  <Icon name="x" size={24} color="#6B7280" />
+                </Pressable>
+                <Body style={styles.controlLabel}>Cancel</Body>
+              </View>
 
-              <View style={styles.stopButtonContainer}>
+              {/* Center: Stop / Finish */}
+              <View style={styles.controlItem}>
                 <Pressable
                   style={[styles.controlButton, styles.stopButton]}
                   onPress={stopRecording}
@@ -423,25 +501,34 @@ export default function RecordingModal({
                 >
                   <Icon name="stop" size={24} color="#FFFFFF" />
                 </Pressable>
-                <Body style={styles.stopButtonLabel}>Finish recording</Body>
+                <Body style={styles.controlLabel}>Stop</Body>
               </View>
 
-              {recordingState === 'recording' ? (
-                <Pressable
-                  style={[styles.controlButton, styles.pauseButton]}
-                  onPress={pauseRecording}
-                >
-                  <Icon name="pause" size={24} color="#111827" />
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={[styles.controlButton, styles.resumeButton]}
-                  onPress={resumeRecording}
-                  disabled={!hasRecording}
-                >
-                  <Icon name="play" size={24} color="#111827" />
-                </Pressable>
-              )}
+              {/* Right: Pause / Resume */}
+              <View style={styles.controlItem}>
+                {recordingState === 'recording' ? (
+                  <>
+                    <Pressable
+                      style={[styles.controlButton, styles.pauseButton]}
+                      onPress={pauseRecording}
+                    >
+                      <Icon name="pause" size={24} color="#2563EB" />
+                    </Pressable>
+                    <Body style={styles.controlLabel}>Pause</Body>
+                  </>
+                ) : (
+                  <>
+                    <Pressable
+                      style={[styles.controlButton, styles.resumeButton]}
+                      onPress={resumeRecording}
+                      disabled={!hasRecording}
+                    >
+                      <Icon name="play" size={24} color="#2563EB" />
+                    </Pressable>
+                    <Body style={styles.controlLabel}>Resume</Body>
+                  </>
+                )}
+              </View>
             </View>
           </Pressable>
           {/* Bottom safe area padding */}
@@ -501,31 +588,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  errorContainer: {
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
-    padding: 24, // --space-6
-    borderRadius: 10, // --radius-md
-    marginBottom: 24, // --space-6
-    alignItems: 'center',
-  },
-  permissionTitle: {
-    color: '#111827', // --color-text-primary
-    marginBottom: 8, // --space-2
-    textAlign: 'center',
-  },
-  permissionBody: {
-    color: '#6B7280', // --color-text-secondary
-    marginBottom: 20, // --space-5
-    textAlign: 'center',
-  },
-  errorText: {
-    color: '#DC2626', // --color-error
-    marginBottom: 12, // --space-3
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 0,
-  },
   timerContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -574,45 +636,32 @@ const styles = StyleSheet.create({
   },
   controls: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingBottom: 16, // --space-4
   },
+  controlItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
   controlButton: {
-    minWidth: 60,
-    minHeight: 60,
+    width: 60,
+    height: 60,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 30,
   },
-  stopButtonContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  cancelButton: {
+    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    borderWidth: 1,
+    borderColor: '#E5E7EB', // --color-border-default
   },
   stopButton: {
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: '#DC2626', // --color-error (red for destructive action)
     width: 80,
     height: 80,
     borderRadius: 40,
-  },
-  stopButtonLabel: {
-    color: '#6B7280', // --color-text-secondary
-    fontSize: 12,
-    fontFamily: 'Satoshi-Medium',
-    textAlign: 'center',
-    marginTop: 8, // --space-2
-  },
-  recordButton: {
-    backgroundColor: '#DC2626', // --color-error (red for record)
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  recordButtonInner: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
   },
   pauseButton: {
     backgroundColor: '#F9FAFB', // --color-bg-secondary
@@ -624,10 +673,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB', // --color-border-default
   },
-  controlButtonText: {
-    fontSize: 16,
+  controlLabel: {
     color: '#6B7280', // --color-text-secondary
-    fontFamily: 'Satoshi-Medium',
+    fontSize: 12, // --font-size-xs
+    marginTop: 8, // --space-2
+    textAlign: 'center',
   },
   pausedLabel: {
     color: '#6B7280', // --color-text-secondary
