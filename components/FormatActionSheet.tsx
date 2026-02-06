@@ -18,7 +18,7 @@ const formatOptions: FormatOption[] = [
 
 interface FormatActionSheetProps {
   isOpen: boolean
-  actionType: 'copy' | 'share' | 'download'
+  actionType: 'copy' | 'share'
   availableFormats: OutputType[]
   onSelect: (format: OutputType) => void
   onClose: () => void
@@ -60,7 +60,6 @@ export default function FormatActionSheet({
     const titles = {
       copy: 'Copy',
       share: 'Share',
-      download: 'Download',
     }
     return titles[actionType]
   }
@@ -133,7 +132,7 @@ export default function FormatActionSheet({
                     onPress={() => handleSelect(option.key)}
                   >
                     <Icon
-                      name={actionType === 'copy' ? 'copy' : actionType === 'share' ? 'share' : 'download'}
+                      name={actionType === 'copy' ? 'copy' : 'share'}
                       size={20}
                       color="#111827"
                     />

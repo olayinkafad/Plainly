@@ -5,7 +5,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from '../../components/Icon'
 import { format } from 'date-fns'
 import * as Clipboard from 'expo-clipboard'
-import * as FileSystem from 'expo-file-system'
 import { Title, Body, Meta } from '../../components/typography'
 import { recordingsStore, Recording } from '../../store/recordings'
 import { OutputType } from '../../types'
@@ -39,7 +38,7 @@ export default function RecordingDetail() {
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [showFormatActionSheet, setShowFormatActionSheet] = useState(false)
-  const [formatActionType, setFormatActionType] = useState<'copy' | 'share' | 'download' | null>(null)
+  const [formatActionType, setFormatActionType] = useState<'copy' | 'share' | null>(null)
   const hasAutoTitledRef = useRef(false)
   const tabsScrollViewRef = useRef<ScrollView>(null)
   const tabLayoutsRef = useRef<Map<OutputType, { x: number; width: number }>>(new Map())
@@ -370,34 +369,6 @@ export default function RecordingDetail() {
     }
   }
 
-  const handleDownload = () => {
-    setFormatActionType('download')
-    setShowFormatActionSheet(true)
-  }
-
-  const handleDownloadFormat = async (format: OutputType) => {
-    if (!recording) return
-    
-    const text = getActiveFormatText(format, recording.outputs)
-    if (!text || !text.trim()) return
-
-    try {
-      const formatTitle = formatOptions.find(opt => opt.key === format)?.title || 'content'
-      const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm')
-      const filename = `plainly_${recording.id}_${format}_${timestamp}.txt`
-      const fileUri = `${FileSystem.documentDirectory}${filename}`
-
-      await FileSystem.writeAsStringAsync(fileUri, text, {
-        encoding: FileSystem.EncodingType.UTF8,
-      })
-
-      Alert.alert('Saved', `${formatTitle} saved to Documents`)
-    } catch (error) {
-      console.error('Failed to download:', error)
-      Alert.alert('Error', 'Failed to save file')
-    }
-  }
-
   // Check if a format output is unavailable/empty/invalid
   const isFormatUnavailable = (format: OutputType, output: any): boolean => {
     if (!output) return true
@@ -538,11 +509,6 @@ export default function RecordingDetail() {
     }
   }
 
-  const handleDownloadAudio = () => {
-    // TODO: Implement download
-    console.log('Download audio:', recording?.audioBlobUrl)
-  }
-
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -618,12 +584,6 @@ export default function RecordingDetail() {
             onPress={handleShare}
           >
             <Icon name="share" size={20} color="#6B7280" />
-          </Pressable>
-          <Pressable
-            style={styles.navActionButton}
-            onPress={handleDownload}
-          >
-            <Icon name="download" size={20} color="#6B7280" />
           </Pressable>
         <Pressable
           style={styles.navButton}
@@ -779,7 +739,6 @@ export default function RecordingDetail() {
           recordingTitle={formatRecordingTitle(recording)}
           audioUri={recording.audioBlobUrl}
           onRename={handleRename}
-          onDownload={handleDownloadAudio}
           onDelete={handleDeleteRecording}
           onClose={() => setShowActionsSheet(false)}
         />
@@ -814,8 +773,6 @@ export default function RecordingDetail() {
               handleCopyFormat(format)
             } else if (formatActionType === 'share') {
               handleShareFormat(format)
-            } else if (formatActionType === 'download') {
-              handleDownloadFormat(format)
             }
           }}
           onClose={() => {

@@ -57,13 +57,13 @@ const slides: Slide[] = [
     ),
   },
   {
-    title: 'Download or share',
-    body: 'Copy, download, or share your output instantly.',
+    title: 'Copy or share',
+    body: 'Copy or share your output instantly.',
     illustration: (
       <View className="relative w-full max-w-xs mx-auto">
         <View className="bg-bg-secondary rounded-lg p-6 border border-border-subtle">
           <View className="items-center justify-center h-32">
-            <Icon name="download" size={48} color="#9CA3AF" />
+            <Icon name="share" size={48} color="#9CA3AF" />
           </View>
         </View>
       </View>

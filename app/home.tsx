@@ -220,11 +220,6 @@ export default function Home() {
     }
   }
 
-  const handleDownloadAudio = (audioBlobUrl: string) => {
-    // TODO: Implement download
-    console.log('Download audio:', audioBlobUrl)
-  }
-
   const formatDuration = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
@@ -401,7 +396,6 @@ export default function Home() {
               recordingTitle={selectedRecording.title}
               audioUri={selectedRecording.audioBlobUrl}
               onRename={handleRename}
-              onDownload={() => handleDownloadAudio(selectedRecording.audioBlobUrl)}
               onDelete={() => handleDeleteRecording(selectedRecording.id)}
               onClose={() => {
                 setShowActionsSheet(false)

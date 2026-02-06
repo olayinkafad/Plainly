@@ -10,7 +10,6 @@ interface RecordingActionsSheetProps {
   recordingTitle: string
   audioUri: string
   onRename?: () => void
-  onDownload: () => void
   onDelete: () => void
   onClose: () => void
 }
@@ -20,7 +19,6 @@ export default function RecordingActionsSheet({
   recordingTitle,
   audioUri,
   onRename,
-  onDownload,
   onDelete,
   onClose,
 }: RecordingActionsSheetProps) {
@@ -103,10 +101,6 @@ export default function RecordingActionsSheet({
                     <Body style={styles.actionText}>Rename</Body>
                   </Pressable>
                 )}
-                <Pressable style={styles.actionItem} onPress={onDownload}>
-                  <Icon name="download" size={20} color="#111827" />
-                  <Body style={styles.actionText}>Download audio</Body>
-                </Pressable>
                 <Pressable style={styles.actionItem} onPress={handleDelete}>
                   <Icon name="trash" size={20} color="#DC2626" />
                   <Body style={[styles.actionText, styles.deleteText]}>
