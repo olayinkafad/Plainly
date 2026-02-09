@@ -347,6 +347,7 @@ export default function Home() {
           <Pressable
             style={styles.ctaContainer}
             onPress={handleRecord}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
             accessibilityLabel={recordings.length === 0 ? "Record your first voice note" : "Record your voice note"}
             accessibilityRole="button"
           >
@@ -518,6 +519,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16, // --space-4
+    width: '100%',
+    minHeight: 120, // Ensures a large enough touch target
   },
   pulseContainer: {
     width: 80,
