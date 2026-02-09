@@ -283,7 +283,7 @@ export default function Home() {
             <View style={styles.emptyContent}>
               <Title style={styles.emptyTitle}>What's on your mind?</Title>
               <Body style={styles.emptySubtext}>
-                Record your voice notes and Plainly will turn them into something clear and useful.
+                Record your voice notes and Plainly will turn them into summaries, action items and transcripts.
               </Body>
 
               {/* Illustration */}
