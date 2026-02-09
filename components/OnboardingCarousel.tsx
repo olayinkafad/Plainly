@@ -16,8 +16,8 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window')
 
 const slides: Slide[] = [
   {
-    title: 'Record or upload',
-    body: 'Speak your thoughts out loud or upload an existing voice note.',
+    title: 'Voice notes shouldn’t stay messy.',
+    body: 'Plainly helps you make sense of what you say — instantly.',
     illustration: (
       <View className="relative w-full max-w-xs mx-auto">
         <View className="bg-bg-secondary rounded-lg p-6 border border-border-subtle">
@@ -29,8 +29,8 @@ const slides: Slide[] = [
     ),
   },
   {
-    title: 'Choose your format',
-    body: 'Pick notes, a summary, or action items.',
+    title: 'Not just recorded. Structured.',
+    body: 'Get summaries, action items, and transcripts from every recording.',
     illustration: (
       <View className="relative w-full max-w-xs mx-auto">
         <View className="bg-bg-secondary rounded-lg p-6 border border-border-subtle">
@@ -44,26 +44,13 @@ const slides: Slide[] = [
     ),
   },
   {
-    title: 'See your text',
-    body: "Plainly's AI turns your voice into clear, structured text.",
+    title: 'Talk it out. We’ll organize it.',
+    body: 'Ideas, meetings, reflections, to-dos — all in one place.',
     illustration: (
       <View className="relative w-full max-w-xs mx-auto">
         <View className="bg-bg-secondary rounded-lg p-6 border border-border-subtle">
           <View className="items-center justify-center h-32">
             <Icon name="sparkle" size={48} color="#9CA3AF" />
-          </View>
-        </View>
-      </View>
-    ),
-  },
-  {
-    title: 'Copy or share',
-    body: 'Copy or share your output instantly.',
-    illustration: (
-      <View className="relative w-full max-w-xs mx-auto">
-        <View className="bg-bg-secondary rounded-lg p-6 border border-border-subtle">
-          <View className="items-center justify-center h-32">
-            <Icon name="share" size={48} color="#9CA3AF" />
           </View>
         </View>
       </View>

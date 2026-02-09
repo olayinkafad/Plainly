@@ -44,10 +44,10 @@ export default function Index() {
         
         <View style={styles.textContainer}>
           <Title style={styles.title}>
-            Say it out loud.
+            Speak your thoughts. Get clarity back.
           </Title>
           <Body style={styles.subtitle}>
-            Plainly helps you turn spoken thoughts into structured clarity, instantly!
+            Plainly turns voice notes into summaries, action points, and transcripts.
           </Body>
         </View>
 

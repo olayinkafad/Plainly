@@ -14,16 +14,16 @@ interface Slide {
 
 const slides: Slide[] = [
   {
-    title: 'Messy thoughts are okay',
-    body: "You don't need to be clear. Just speak naturally.",
+    title: 'Voice notes shouldn’t stay messy.',
+    body: 'Plainly helps you make sense of what you say — instantly.',
   },
   {
-    title: 'Plainly finds the structure',
-    body: 'Turn voice notes into summaries, key points, or action items.',
+    title: 'Not just recorded. Structured.',
+    body: 'Get summaries, action items, and transcripts from every recording.',
   },
   {
-    title: 'Clarity in seconds',
-    body: 'Record once. Choose what you need.',
+    title: 'Talk it out. We’ll organize it.',
+    body: 'Ideas, meetings, reflections, to-dos — all in one place.',
   },
 ]
 
@@ -288,12 +288,12 @@ export default function Onboarding() {
             onPress={() => {
               router.push('/home?startRecording=true')
             }}
-            accessibilityLabel="Record your first thought"
+            accessibilityLabel="Record your first voice note"
             accessibilityRole="button"
           >
             {/* Label card - at the top */}
             <View style={styles.labelCard}>
-              <Body style={styles.labelText}>Record your first thought</Body>
+              <Body style={styles.labelText}>Record your first voice note</Body>
             </View>
             {/* Pulse rings */}
             <View style={styles.pulseContainer}>

@@ -283,7 +283,7 @@ export default function Home() {
             <View style={styles.emptyContent}>
               <Title style={styles.emptyTitle}>What's on your mind?</Title>
               <Body style={styles.emptySubtext}>
-                Record your thoughts and Plainly will turn it into something clear and useful.
+                Record your voice notes and Plainly will turn them into something clear and useful.
               </Body>
 
               {/* Illustration */}
@@ -347,13 +347,13 @@ export default function Home() {
           <Pressable
             style={styles.ctaContainer}
             onPress={handleRecord}
-            accessibilityLabel={recordings.length === 0 ? "Record your first thought" : "Record your thought"}
+            accessibilityLabel={recordings.length === 0 ? "Record your first voice note" : "Record your voice note"}
             accessibilityRole="button"
           >
             {/* Label card - at the top */}
             <View style={styles.labelCard}>
               <Body style={styles.labelText}>
-                {recordings.length === 0 ? 'Record your first thought' : 'Record your thought'}
+                {recordings.length === 0 ? 'Record your first voice note' : 'Record your voice note'}
               </Body>
             </View>
             {/* Pulse rings */}
