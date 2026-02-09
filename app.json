@@ -2,6 +2,7 @@
   "expo": {
     "name": "Plainly",
     "slug": "plainly",
+    "owner": "jolfad",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -14,14 +15,32 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.plainly.app"
+      "bundleIdentifier": "com.plainly.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.plainly.app"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ],
-    "scheme": "plainly"
+    "scheme": "plainly",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "76c48098-377b-4e7e-a714-809842e1176b"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/76c48098-377b-4e7e-a714-809842e1176b"
+    }
   }
 }

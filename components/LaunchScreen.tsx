@@ -53,12 +53,12 @@ export default function LaunchScreen() {
           <View className="items-center gap-6">
             {/* Title */}
             <Text className="text-xl font-semibold text-text-primary text-center">
-              Say it out loud.
+              Speak your thoughts. Get clarity back.
             </Text>
 
             {/* Subtext */}
             <Text className="text-sm text-text-secondary text-center">
-              Plainly helps you turn spoken thoughts into structured clarity, instantly!
+              Plainly turns voice notes into summaries, action points, and transcripts.
             </Text>
           </View>
         </View>

@@ -22,7 +22,7 @@ const slides: Slide[] = [
       <View className="relative w-full max-w-xs mx-auto">
         <View className="bg-bg-secondary rounded-lg p-6 border border-border-subtle">
           <View className="items-center justify-center h-32">
-            <Mic size={48} color="#9CA3AF" />
+            <Icon name="microphone" size={48} color="#9CA3AF" />
           </View>
         </View>
       </View>
