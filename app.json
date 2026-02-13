@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#ffffff",
+      "backgroundColor": "#3F70FF",
       "resizeMode": "contain"
     },
     "assetBundlePatterns": [
