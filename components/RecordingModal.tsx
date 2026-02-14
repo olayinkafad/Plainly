@@ -7,6 +7,7 @@ import Icon from './Icon'
 import { Title, Body, Meta } from './typography'
 import Button from './Button'
 import { Recording, recordingsStore } from '../store/recordings'
+import { themeLight } from '../constants/theme'
 
 interface RecordingModalProps {
   isOpen: boolean
@@ -432,7 +433,7 @@ export default function RecordingModal({
             {/* Header */}
             <View style={[styles.header, { paddingTop: 8 }]}>
               <Pressable onPress={handleCancel} style={styles.closeButton}>
-                <Icon name="x" size={24} color="#6B7280" />
+                <Icon name="x" size={24} color={themeLight.textSecondary} />
               </Pressable>
             </View>
 
@@ -487,7 +488,7 @@ export default function RecordingModal({
                   style={[styles.controlButton, styles.cancelButton]}
                   onPress={handleCancel}
                 >
-                  <Icon name="x" size={24} color="#6B7280" />
+                  <Icon name="x" size={24} color={themeLight.textSecondary} />
                 </Pressable>
                 <Body style={styles.controlLabel}>Cancel</Body>
               </View>
@@ -499,7 +500,7 @@ export default function RecordingModal({
                   onPress={stopRecording}
                   disabled={!hasRecording}
                 >
-                  <Icon name="stop" size={24} color="#FFFFFF" />
+                  <Icon name="stop" size={24} color={themeLight.textInverse} />
                 </Pressable>
                 <Body style={styles.controlLabel}>Stop</Body>
               </View>
@@ -512,7 +513,7 @@ export default function RecordingModal({
                       style={[styles.controlButton, styles.pauseButton]}
                       onPress={pauseRecording}
                     >
-                      <Icon name="pause" size={24} color="#2563EB" />
+                      <Icon name="pause" size={24} color={themeLight.accent} />
                     </Pressable>
                     <Body style={styles.controlLabel}>Pause</Body>
                   </>
@@ -523,7 +524,7 @@ export default function RecordingModal({
                       onPress={resumeRecording}
                       disabled={!hasRecording}
                     >
-                      <Icon name="play" size={24} color="#2563EB" />
+                      <Icon name="play" size={24} color={themeLight.accent} />
                     </Pressable>
                     <Body style={styles.controlLabel}>Resume</Body>
                   </>
@@ -550,7 +551,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     width: '100%',
@@ -563,7 +564,7 @@ const styles = StyleSheet.create({
   grabHandle: {
     width: 40,
     height: 4,
-    backgroundColor: '#E5E7EB', // --color-border-default
+    backgroundColor: themeLight.border,
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8, // --space-2
@@ -578,7 +579,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   closeButton: {
     padding: 8, // --space-2
@@ -596,29 +597,29 @@ const styles = StyleSheet.create({
   },
   timer: {
     fontSize: 48,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     marginBottom: 8, // --space-2
   },
   primaryText: {
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     fontSize: 20,
     marginTop: 16, // --space-4
     marginBottom: 8, // --space-2
     textAlign: 'center',
   },
   secondaryText: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 8, // --space-2
   },
   recordingLabel: {
-    color: '#DC2626', // --color-error
+    color: themeLight.error, // --color-error
     fontSize: 12,
     marginTop: 8, // --space-2
   },
   helperText: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 16,
   },
   waveformContainer: {
@@ -630,7 +631,7 @@ const styles = StyleSheet.create({
   },
   waveformBar: {
     width: 4,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     borderRadius: 2,
     marginHorizontal: 4, // --space-1
   },
@@ -653,10 +654,10 @@ const styles = StyleSheet.create({
     borderRadius: 30,
   },
   cancelButton: {
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    backgroundColor: themeLight.bgSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
-    shadowColor: '#000000',
+    borderColor: themeLight.border,
+    shadowColor: themeLight.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -666,11 +667,11 @@ const styles = StyleSheet.create({
     elevation: 3, // Android shadow
   },
   stopButton: {
-    backgroundColor: '#DC2626', // --color-error (red for destructive action)
+    backgroundColor: themeLight.error,
     width: 80,
     height: 80,
     borderRadius: 40,
-    shadowColor: '#000000',
+    shadowColor: themeLight.shadow,
     shadowOffset: {
       width: 0,
       height: 4,
@@ -680,10 +681,10 @@ const styles = StyleSheet.create({
     elevation: 5, // Android shadow
   },
   pauseButton: {
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    backgroundColor: themeLight.bgSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
-    shadowColor: '#000000',
+    borderColor: themeLight.border,
+    shadowColor: themeLight.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -693,10 +694,10 @@ const styles = StyleSheet.create({
     elevation: 3, // Android shadow
   },
   resumeButton: {
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    backgroundColor: themeLight.bgSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
-    shadowColor: '#000000',
+    borderColor: themeLight.border,
+    shadowColor: themeLight.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -706,13 +707,13 @@ const styles = StyleSheet.create({
     elevation: 3, // Android shadow
   },
   controlLabel: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 12, // --font-size-xs
     marginTop: 8, // --space-2
     textAlign: 'center',
   },
   pausedLabel: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 12,
     marginTop: 8, // --space-2
   },

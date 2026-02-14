@@ -18,6 +18,7 @@ import SummaryDisplay from '../../components/SummaryDisplay'
 import ActionItemsDisplay from '../../components/ActionItemsDisplay'
 import FormatActionSheet from '../../components/FormatActionSheet'
 import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput, StructuredActionItems, ActionItemsOutput } from '../../types'
+import { themeLight } from '../../constants/theme'
 
 const formatOptions: { key: OutputType; title: string }[] = [
   { key: 'summary', title: 'Summary' },
@@ -569,7 +570,7 @@ export default function RecordingDetail() {
           style={styles.navButton}
           onPress={() => router.push('/home')}
         >
-          <Icon name="caret-left" size={24} color="#111827" />
+          <Icon name="caret-left" size={24} color={themeLight.textPrimary} />
         </Pressable>
         <View style={styles.navSpacer} />
         <View style={styles.navActionsContainer}>
@@ -577,19 +578,19 @@ export default function RecordingDetail() {
             style={styles.navActionButton}
             onPress={handleCopy}
           >
-            <Icon name="copy" size={20} color="#6B7280" />
+            <Icon name="copy" size={20} color={themeLight.textSecondary} />
           </Pressable>
           <Pressable
             style={styles.navActionButton}
             onPress={handleShare}
           >
-            <Icon name="share" size={20} color="#6B7280" />
+            <Icon name="share" size={20} color={themeLight.textSecondary} />
           </Pressable>
         <Pressable
           style={styles.navButton}
           onPress={() => setShowActionsSheet(true)}
         >
-          <Icon name="dots-three-vertical" size={24} color="#111827" />
+          <Icon name="dots-three-vertical" size={24} color={themeLight.textPrimary} />
         </Pressable>
         </View>
       </View>
@@ -721,7 +722,7 @@ export default function RecordingDetail() {
           onPress={() => !isGenerating && setShowFormatPicker(true)}
           disabled={isGenerating}
         >
-          <Icon name="plus" size={16} color={isGenerating ? '#9CA3AF' : '#2563EB'} />
+          <Icon name="plus" size={16} color={isGenerating ? themeLight.textTertiary : themeLight.accent} />
           <Body style={[
             styles.addFormatText,
             isGenerating && styles.addFormatTextDisabled,
@@ -788,7 +789,7 @@ export default function RecordingDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.bgPrimary,
     position: 'relative', // For absolute positioning of floating button
   },
   loadingContainer: {
@@ -841,12 +842,12 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontSize: 20, // --font-size-lg
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     marginBottom: 4, // --space-1
   },
   subtitleText: {
     fontSize: 12, // --font-size-xs
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
   },
   tabsContainer: {
     borderBottomWidth: 1,
@@ -864,25 +865,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8, // --space-2
     paddingHorizontal: 16, // --space-4
     borderRadius: 20, // Pill shape (larger than --radius-lg for full pill)
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    backgroundColor: themeLight.bgSecondary,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
+    borderColor: themeLight.border,
     minHeight: 36, // Minimum touch target for accessibility
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   tabActive: {
-    backgroundColor: '#2563EB', // --color-accent-primary
-    borderColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
+    borderColor: themeLight.accent,
   },
   tabText: {
     fontSize: 14, // --font-size-sm
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontFamily: 'Satoshi-Medium',
   },
   tabTextActive: {
-    color: '#FFFFFF', // White text on active pill
+    color: themeLight.tabActiveText,
   },
   addFormatButton: {
     position: 'absolute',
@@ -893,10 +894,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8, // --space-2
     paddingHorizontal: 12, // --space-3
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.bgPrimary,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
-    shadowColor: '#000',
+    borderColor: themeLight.border,
+    shadowColor: themeLight.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -907,7 +908,7 @@ const styles = StyleSheet.create({
   },
   addFormatText: {
     fontSize: 13,
-    color: '#2563EB', // --color-accent-primary
+    color: themeLight.accent,
     fontFamily: 'Satoshi-Medium',
     marginLeft: 4, // --space-1
   },
@@ -932,7 +933,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   outputText: {
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     fontSize: 16,
     lineHeight: 24,
   },
@@ -949,12 +950,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     textAlign: 'center',
     marginBottom: 12, // --space-3
   },
   emptyBody: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -962,7 +963,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // --space-4
   },
   emptySuggestion: {
-    color: '#9CA3AF', // --color-text-tertiary
+    color: themeLight.textTertiary,
     fontSize: 13,
     textAlign: 'center',
     fontStyle: 'italic',

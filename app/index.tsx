@@ -4,13 +4,14 @@ import { useRouter } from 'expo-router'
 import { Title } from '../components/typography'
 import Icon from '../components/Icon'
 import { recordingsStore } from '../store/recordings'
+import { themeLight } from '../constants/theme'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const LOADER_WIDTH_RATIO = 0.55
 const LOADER_DURATION_MS = 2500
 
-const SPLASH_BG = '#3F70FF'
-const LOGO_ICON_COLOR = '#2196F3'
+const SPLASH_BG = themeLight.accent
+const LOGO_ICON_COLOR = themeLight.accent
 
 export default function Index() {
   const router = useRouter()
@@ -87,12 +88,12 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   appName: {
-    color: '#FFFFFF',
+    color: themeLight.textInverse,
     marginTop: 24,
     marginBottom: 60,
   },
@@ -105,6 +106,6 @@ const styles = StyleSheet.create({
   loaderFill: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
   },
 })

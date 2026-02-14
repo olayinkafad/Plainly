@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, ViewStyle, TextStyle, ReactElement } from 'react-native'
+import { themeLight } from '../constants/theme'
 import { ButtonText } from './typography'
 
 interface ButtonProps {
@@ -72,12 +73,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primary: {
-    backgroundColor: '#2563EB',
+    backgroundColor: themeLight.accent,
   },
   secondary: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: themeLight.border,
   },
   ghost: {
     backgroundColor: 'transparent',
@@ -92,12 +93,12 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   primaryText: {
-    color: '#FFFFFF',
+    color: themeLight.textInverse,
   },
   secondaryText: {
-    color: '#111827',
+    color: themeLight.textPrimary,
   },
   ghostText: {
-    color: '#9CA3AF',
+    color: themeLight.textTertiary,
   },
 })

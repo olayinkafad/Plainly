@@ -7,6 +7,7 @@ import { recordingsStore, Recording } from '../store/recordings'
 import { OutputType, TranscriptOutput, StructuredTranscript, SummaryOutput, StructuredSummary, ActionItemsOutput, StructuredActionItems } from '../types'
 import Button from '../components/Button'
 import { processRecording } from '../lib/api'
+import { themeLight } from '../constants/theme'
 
 const MIN_LOADING_TIME = 700 // Minimum visible loading time in milliseconds
 
@@ -252,7 +253,7 @@ export default function Generating() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#2563EB" style={styles.loader} />
+          <ActivityIndicator size="large" color={themeLight.accent} style={styles.loader} />
           <Title style={styles.title}>{formatContent.title}</Title>
           {formatContent.helper && (
             <Body style={styles.helper}>{formatContent.helper}</Body>
@@ -266,7 +267,7 @@ export default function Generating() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.bgPrimary,
   },
   content: {
     flex: 1,
@@ -285,25 +286,25 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     textAlign: 'center',
     marginBottom: 12, // --space-3
   },
   helper: {
     fontSize: 14,
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     textAlign: 'center',
     marginTop: 4, // --space-1
   },
   errorTitle: {
     fontSize: 24,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     textAlign: 'center',
     marginBottom: 12, // --space-3
   },
   errorBody: {
     fontSize: 14,
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     textAlign: 'center',
     marginBottom: 24, // --space-6
     paddingHorizontal: 16, // --space-4

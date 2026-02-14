@@ -7,6 +7,7 @@ import {
   Dimensions,
 } from 'react-native'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 const ILLUSTRATION_WIDTH = SCREEN_WIDTH - 32 - 32
@@ -21,9 +22,7 @@ const MIC_SIZE = 80
 const MIC_ICON_SIZE = 32
 const GAP_MIC_TO_WAVEFORM = 28
 
-const PRIMARY = '#2B6BF2'
-const PRIMARY_LIGHT = '#4A8DF8'
-const PRIMARY_DARK = '#1E5AD4'
+const ACCENT = themeLight.accent
 
 const RING_SIZES = [130, 160, 200]
 const RING_DELAYS = [0, 1000, 2000]
@@ -214,7 +213,7 @@ export default function OnboardingWaveform() {
               alignRight ? { right: 16, left: undefined, textAlign: 'right' } : { left: `${xFraction * 100}%` },
               {
                 top: `${yFraction * 100}%`,
-                color: `rgba(43, 107, 242, ${PHRASE_OPACITIES[i]})`,
+                color: `rgba(${themeLight.accentRgb}, ${PHRASE_OPACITIES[i]})`,
                 fontSize: PHRASE_FONT_SIZES[i],
                 transform: [{ translateY: driftY }],
                 opacity,
@@ -298,7 +297,7 @@ export default function OnboardingWaveform() {
                   styles.bar,
                   {
                     height: h,
-                    backgroundColor: PRIMARY,
+                    backgroundColor: ACCENT,
                     opacity: BAR_OPACITIES[i],
                     transform: [{ translateY }, { scaleY }],
                   },
@@ -340,21 +339,21 @@ const styles = StyleSheet.create({
     left: (MIC_RING_WRAPPER_SIZE - 200) / 2,
     top: (MIC_RING_WRAPPER_SIZE - 200) / 2,
     borderRadius: 100,
-    backgroundColor: 'rgba(43, 107, 242, 0.12)',
+    backgroundColor: `rgba(${themeLight.accentRgb}, 0.12)`,
   },
   pulseRing: {
     position: 'absolute',
-    backgroundColor: 'rgba(43, 107, 242, 0.1)',
+    backgroundColor: `rgba(${themeLight.accentRgb}, 0.1)`,
   },
   micCircle: {
     width: MIC_SIZE,
     height: MIC_SIZE,
     borderRadius: MIC_SIZE / 2,
-    backgroundColor: PRIMARY,
+    backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
-    shadowColor: '#2B6BF2',
+    shadowColor: themeLight.accent,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 30,

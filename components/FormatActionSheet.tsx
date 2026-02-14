@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { View, StyleSheet, Pressable, Modal, Animated } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 import { Title, Body } from './typography'
 import { OutputType } from '../types'
 
@@ -108,7 +109,7 @@ export default function FormatActionSheet({
               <View style={styles.headerContent}>
                 <Title style={styles.sheetTitle}>{getActionTitle()}</Title>
                 <Pressable onPress={onClose} style={styles.closeButton}>
-                  <Icon name="x" size={20} color="#6B7280" />
+                  <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
               </View>
             </View>
@@ -134,7 +135,7 @@ export default function FormatActionSheet({
                     <Icon
                       name={actionType === 'copy' ? 'copy' : 'share'}
                       size={20}
-                      color="#111827"
+                      color={themeLight.textPrimary}
                     />
                     <Body style={styles.actionText}>
                       {getActionTitle()} {getFormatLabel(option.key).toLowerCase()}
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 16, // --space-4
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     flex: 1,
     fontSize: 18,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   closeButton: {
     padding: 8, // --space-2
@@ -199,7 +200,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 16,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   emptyContainer: {
     paddingVertical: 24,
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
     textAlign: 'center',
   },

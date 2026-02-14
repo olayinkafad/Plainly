@@ -27,7 +27,7 @@ export default function LaunchScreen() {
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: '#FFFFFF' }}
+      style={{ flex: 1, backgroundColor: '#FDFCFB' }}
       contentContainerStyle={{
         flexGrow: 1,
         paddingHorizontal: 16,

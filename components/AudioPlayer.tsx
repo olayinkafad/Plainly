@@ -3,6 +3,7 @@ import { View, StyleSheet, Pressable } from 'react-native'
 import { Audio } from 'expo-av'
 import Icon from './Icon'
 import { Body, Meta } from './typography'
+import { themeLight } from '../constants/theme'
 
 interface AudioPlayerProps {
   audioUri: string
@@ -176,15 +177,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16, // --space-4
     paddingHorizontal: 16, // --space-4
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    backgroundColor: themeLight.bgSecondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9', // --color-border-subtle
+    borderBottomColor: themeLight.border,
   },
   playButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12, // --space-3
@@ -199,20 +200,20 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
   },
   scrubber: {
     width: '100%',
   },
   scrubberTrack: {
     height: 4,
-    backgroundColor: '#E5E7EB', // --color-border-default
+    backgroundColor: themeLight.border,
     borderRadius: 2,
     overflow: 'hidden',
   },
   scrubberFill: {
     height: '100%',
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     borderRadius: 2,
   },
 })

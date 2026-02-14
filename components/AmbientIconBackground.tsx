@@ -147,12 +147,12 @@ export default function AmbientIconBackground({ variant }: AmbientIconBackground
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {/* Gradient Background - soft blue-white */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#F8FAFC' }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#FDFCFB' }]} />
       <View
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: '#DBEAFE',
+            backgroundColor: '#F5E0D8',
             opacity: 0.5,
           },
         ]}
@@ -161,7 +161,7 @@ export default function AmbientIconBackground({ variant }: AmbientIconBackground
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: '#FFFFFF',
+            backgroundColor: '#FDFCFB',
             opacity: 0.7,
           },
         ]}
@@ -203,7 +203,7 @@ export default function AmbientIconBackground({ variant }: AmbientIconBackground
             <Icon
               name={config.name}
               size={config.size}
-              color="#2563EB"
+              color="#C45D3E"
             />
           </Animated.View>
         )

@@ -1,4 +1,5 @@
 import { Text, TextProps, StyleSheet, TextStyle } from 'react-native'
+import { themeLight } from '../constants/theme'
 
 /**
  * Typography components using Satoshi font family.
@@ -66,18 +67,18 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: 'Satoshi-Bold',
     fontSize: 24,
-    color: '#111827',
+    color: themeLight.textPrimary,
   },
   body: {
     fontFamily: 'Satoshi-Regular',
     fontSize: 14,
-    color: '#111827',
+    color: themeLight.textPrimary,
     lineHeight: 20,
   },
   meta: {
     fontFamily: 'Satoshi-Regular',
     fontSize: 12,
-    color: '#9CA3AF',
+    color: themeLight.textTertiary,
   },
   buttonText: {
     fontFamily: 'Satoshi-Medium',

@@ -2,6 +2,7 @@ import { View, Text, Pressable } from 'react-native'
 import { Mic, MoreHorizontal } from 'lucide-react-native'
 import { Recording } from '../store/recordings'
 import { format } from 'date-fns'
+import { themeLight } from '../constants/theme'
 
 interface RecordingRowProps {
   recording: Recording
@@ -66,7 +67,7 @@ export default function RecordingRow({
         className="flex-shrink-0"
         style={{ minWidth: 44, minHeight: 44 }}
       >
-        <MoreHorizontal size={20} color="#6B7280" />
+        <MoreHorizontal size={20} color={themeLight.textSecondary} />
       </Pressable>
     </View>
   )

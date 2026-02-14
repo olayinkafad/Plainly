@@ -15,6 +15,7 @@ import Button from '../components/Button'
 import OnboardingWaveform from '../components/OnboardingWaveform'
 import OnboardingResultPreview from '../components/OnboardingResultPreview'
 import OnboardingUseCaseCards from '../components/OnboardingUseCaseCards'
+import { themeLight } from '../constants/theme'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
@@ -192,7 +193,7 @@ export default function Onboarding() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.bgPrimary,
   },
   content: {
     flex: 1,
@@ -211,7 +212,7 @@ const styles = StyleSheet.create({
   slide: {
     paddingHorizontal: 20,
   },
-  /* Illustration – single background (#EEF3FF → #E4EDFF), no nested cards */
+  /* Illustration – warm cream background */
   illustrationArea: {
     width: '100%',
     borderRadius: 16,
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#E8EEFE',
+    backgroundColor: themeLight.bgSecondary,
   },
   illustrationWrapper: {
     width: '100%',
@@ -233,13 +234,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Satoshi-Bold',
     fontSize: 29,
     textAlign: 'center',
-    color: '#111827',
+    color: themeLight.textPrimary,
   },
   /* Subtext – Satoshi-Regular from assets */
   body: {
     fontFamily: 'Satoshi-Regular',
     textAlign: 'center',
-    color: '#6B7280',
+    color: themeLight.textSecondary,
   },
   progressContainer: {
     flexDirection: 'row',
@@ -253,13 +254,13 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: themeLight.tabInactiveBg,
   },
   progressDotActive: {
     width: 24,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#2563EB',
+    backgroundColor: themeLight.accent,
   },
   bottomZone: {
     paddingHorizontal: 16,

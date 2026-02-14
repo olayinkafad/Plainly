@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { View, StyleSheet, Pressable, Modal, Animated, ScrollView, Dimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 import { Title, Body } from './typography'
 import { OutputType } from '../types'
 import Button from './Button'
@@ -129,7 +130,7 @@ export default function FormatPickerSheet({
               <View style={styles.headerContent}>
                 <Title style={styles.sheetTitle}>Generate new format</Title>
                 <Pressable onPress={onClose} style={styles.closeButton}>
-                  <Icon name="x" size={20} color="#6B7280" />
+                  <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
               </View>
             </View>
@@ -209,7 +210,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     width: '100%',
@@ -232,7 +233,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     flex: 1,
     fontSize: 18,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   closeButton: {
     padding: 8, // --space-2
@@ -251,17 +252,17 @@ const styles = StyleSheet.create({
     paddingBottom: 16, // --space-4
   },
   optionCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
+    borderColor: themeLight.border,
     borderRadius: 12, // --radius-md
     padding: 16, // --space-4
     minHeight: 80,
   },
   optionCardSelected: {
-    borderColor: '#2563EB', // --color-accent-primary
+    borderColor: themeLight.accent,
     borderWidth: 2,
-    backgroundColor: '#EFF6FF', // Light blue background
+    backgroundColor: themeLight.accentSubtle,
   },
   optionCardPressed: {
     opacity: 0.7,
@@ -277,18 +278,18 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     fontSize: 18,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   checkIcon: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   optionHelper: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
   },
   buttonContainer: {
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
     paddingTop: 16, // --space-4
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9', // --color-border-subtle
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
   },
   emptyContainer: {
     paddingVertical: 48, // --space-12
@@ -305,7 +306,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyText: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
     textAlign: 'center',
   },

@@ -2,13 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { View, StyleSheet, Animated, Text, Easing } from 'react-native'
 import Icon from './Icon'
 import { Title, Body } from './typography'
+import { themeLight } from '../constants/theme'
 
-const PRIMARY_BLUE = '#2563EB'
-const TAB_ACTIVE_BG = '#2563EB'
-const TAB_INACTIVE_BG = '#FFFFFF'
-const CARD_BG = '#FFFFFF'
-const HIGHLIGHT_BG = 'rgba(37, 99, 235, 0.22)'
-const FILLER_COLOR = '#9CA3AF'
+const HIGHLIGHT_BG = `rgba(${themeLight.accentRgb}, 0.22)`
 
 const SUMMARY_DURATION_MS = 5000
 const TRANSCRIPT_DURATION_MS = 6000
@@ -273,25 +269,25 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     minHeight: 32,
     justifyContent: 'center',
-    shadowColor: '#000000',
+    shadowColor: themeLight.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
   },
   tabActive: {
-    backgroundColor: TAB_ACTIVE_BG,
+    backgroundColor: themeLight.tabActiveBg,
   },
   tabInactive: {
-    backgroundColor: TAB_INACTIVE_BG,
+    backgroundColor: themeLight.tabInactiveBg,
   },
   tabText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: themeLight.tabInactiveText,
     fontFamily: 'Satoshi-Medium',
   },
   tabTextActive: {
-    color: '#FFFFFF',
+    color: themeLight.tabActiveText,
   },
   cardWrapper: {
     position: 'relative',
@@ -304,11 +300,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    backgroundColor: CARD_BG,
+    backgroundColor: themeLight.cardBg,
     borderRadius: 14,
     paddingVertical: 16,
     paddingHorizontal: 14,
-    shadowColor: '#000000',
+    shadowColor: themeLight.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -320,11 +316,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     top: 0,
-    backgroundColor: CARD_BG,
+    backgroundColor: themeLight.cardBg,
     borderRadius: 14,
     padding: 16,
     overflow: 'hidden',
-    shadowColor: '#000000',
+    shadowColor: themeLight.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -333,17 +329,17 @@ const styles = StyleSheet.create({
   transcriptCardShadow: {},
   summaryTitle: {
     fontSize: 16,
-    color: '#111827',
+    color: themeLight.textPrimary,
     marginBottom: 8,
   },
   divider: {
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: themeLight.border,
     marginBottom: 12,
   },
   summaryPara: {
     fontSize: 13,
-    color: '#111827',
+    color: themeLight.textPrimary,
     lineHeight: Math.round(13 * 1.6),
     marginBottom: 12,
   },
@@ -359,14 +355,14 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: themeLight.accent,
     marginTop: 6,
     flexShrink: 0,
   },
   bulletText: {
     flex: 1,
     fontSize: 12,
-    color: '#111827',
+    color: themeLight.textPrimary,
     lineHeight: Math.round(12 * 1.6),
   },
   audioStrip: {
@@ -374,15 +370,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 16,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: themeLight.bgSecondary,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: themeLight.border,
   },
   audioPlayButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -398,23 +394,23 @@ const styles = StyleSheet.create({
   },
   audioTimeText: {
     fontSize: 12,
-    color: '#6B7280',
+    color: themeLight.textSecondary,
     fontFamily: 'Satoshi-Regular',
   },
   audioScrubberTrack: {
     height: 4,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: themeLight.border,
     borderRadius: 2,
     overflow: 'hidden',
   },
   audioScrubberFill: {
     height: '100%',
-    backgroundColor: PRIMARY_BLUE,
+    backgroundColor: themeLight.accent,
     borderRadius: 2,
   },
   audioSpeedLabel: {
     fontSize: 12,
-    color: '#6B7280',
+    color: themeLight.textSecondary,
     fontFamily: 'Satoshi-Regular',
   },
   transcriptBody: {
@@ -429,11 +425,11 @@ const styles = StyleSheet.create({
   },
   transcriptWord: {
     fontSize: 14,
-    color: '#111827',
+    color: themeLight.textPrimary,
     fontFamily: 'Satoshi-Regular',
     lineHeight: Math.round(14 * 1.7),
   },
   transcriptWordFiller: {
-    color: FILLER_COLOR,
+    color: themeLight.textTertiary,
   },
 })

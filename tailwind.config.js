@@ -9,25 +9,27 @@ module.exports = {
     extend: {
       colors: {
         bg: {
-          primary: '#FFFFFF',
-          secondary: '#F9FAFB',
+          primary: '#FDFCFB',
+          secondary: '#F5F0EB',
+          tertiary: '#EDE6DF',
         },
         text: {
-          primary: '#111827',
-          secondary: '#6B7280',
-          tertiary: '#9CA3AF',
+          primary: '#2C2826',
+          secondary: '#8C8480',
+          tertiary: '#B5AFA9',
         },
         border: {
-          default: '#E5E7EB',
-          subtle: '#F1F5F9',
+          default: '#E8E0D8',
+          subtle: '#EDE6DF',
         },
         accent: {
-          primary: '#2563EB',
+          primary: '#C45D3E',
+          hover: '#B35236',
         },
         status: {
-          success: '#16A34A',
-          warning: '#D97706',
-          error: '#DC2626',
+          success: '#5C8A5E',
+          warning: '#C4873E',
+          error: '#BF4A3A',
         },
       },
       fontSize: {

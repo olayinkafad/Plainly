@@ -2,6 +2,7 @@ import React from 'react'
 import { View, StyleSheet } from 'react-native'
 import { Body, Meta } from './typography'
 import { StructuredActionItems } from '../types'
+import { themeLight } from '../constants/theme'
 
 interface ActionItemsDisplayProps {
   actionItems: StructuredActionItems
@@ -103,11 +104,11 @@ const styles = StyleSheet.create({
   },
   emptyStateText: {
     fontSize: 14, // --font-size-sm
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     textAlign: 'center',
   },
   warningContainer: {
-    backgroundColor: '#FEF3C7', // --color-warning light background
+    backgroundColor: '#FFF8E6',
     padding: 12, // --space-3
     borderRadius: 8, // --radius-md
     marginBottom: 16, // --space-4
@@ -132,7 +133,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#2563EB', // --color-accent-primary
+    borderColor: themeLight.accent,
     marginRight: 12, // --space-3
     marginTop: 2, // Align with first line of text
     alignItems: 'center',
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   },
   taskText: {
     fontSize: 14, // --font-size-sm
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     lineHeight: 22,
     marginBottom: 4, // --space-1
   },
@@ -167,16 +168,16 @@ const styles = StyleSheet.create({
   },
   metadataLabel: {
     fontSize: 12, // --font-size-xs
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontWeight: '600', // --font-weight-semibold
   },
   metadataValue: {
     fontSize: 12, // --font-size-xs
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
   },
   detailsText: {
     fontSize: 12, // --font-size-xs
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     marginTop: 4, // --space-1
     lineHeight: 18,
     fontStyle: 'italic',

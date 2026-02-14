@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { View, StyleSheet, Pressable, Modal, Animated } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 import { Title, Body } from './typography'
 import Button from './Button'
 
@@ -87,7 +88,7 @@ export default function RecordingActionsSheet({
               <View style={styles.headerContent}>
                 <Title style={styles.sheetTitle}>{recordingTitle}</Title>
                 <Pressable onPress={handleClose} style={styles.closeButton}>
-                  <Icon name="x" size={20} color="#6B7280" />
+                  <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
               </View>
             </View>
@@ -97,12 +98,12 @@ export default function RecordingActionsSheet({
               <View style={styles.actions}>
                 {onRename && (
                   <Pressable style={styles.actionItem} onPress={onRename}>
-                    <Icon name="pencil" size={20} color="#111827" />
+                    <Icon name="pencil" size={20} color={themeLight.textPrimary} />
                     <Body style={styles.actionText}>Rename</Body>
                   </Pressable>
                 )}
                 <Pressable style={styles.actionItem} onPress={handleDelete}>
-                  <Icon name="trash" size={20} color="#DC2626" />
+                  <Icon name="trash" size={20} color={themeLight.error} />
                   <Body style={[styles.actionText, styles.deleteText]}>
                     Delete recording
                   </Body>
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     flex: 1,
     fontSize: 18,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   closeButton: {
     padding: 8, // --space-2
@@ -189,23 +190,23 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 16,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   deleteText: {
-    color: '#DC2626', // --color-error
+    color: themeLight.error,
   },
   confirmContainer: {
     paddingVertical: 8,
   },
   confirmTitle: {
     marginBottom: 12, // --space-3
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     textAlign: 'center',
     fontSize: 18,
   },
   confirmText: {
     marginBottom: 24, // --space-6
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     textAlign: 'center',
   },
   confirmActions: {
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#DC2626', // --color-error
+    backgroundColor: themeLight.error,
   },
   deleteButtonPressed: {
     opacity: 0.8,

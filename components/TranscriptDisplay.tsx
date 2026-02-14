@@ -2,6 +2,7 @@ import React from 'react'
 import { View, StyleSheet } from 'react-native'
 import { Body, Meta } from './typography'
 import { StructuredTranscript } from '../types'
+import { themeLight } from '../constants/theme'
 
 interface TranscriptDisplayProps {
   transcript: StructuredTranscript
@@ -63,7 +64,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   warningContainer: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#FFF8E6',
     padding: 12, // --space-3
     borderRadius: 8,
     marginBottom: 16, // --space-4
@@ -88,19 +89,19 @@ const styles = StyleSheet.create({
     marginBottom: 4, // --space-1
   },
   timestamp: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 11, // Slightly smaller than xs
     fontFamily: 'Satoshi-Regular',
   },
   speakerLabel: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 12, // --font-size-xs
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   segmentText: {
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     fontSize: 14, // --font-size-sm
     lineHeight: 22,
   },

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { View, StyleSheet, Animated, Easing, Text } from 'react-native'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 
 
 const BUBBLE_RADIUS = 18
@@ -13,7 +14,7 @@ const FLOAT_DURATION = 5500
 const FLOAT_DELAYS = [0, 1000, 2000, 500, 1500]
 
 const DOT_SIZE = 5
-const DOT_COLOR = 'rgba(43, 107, 242, 0.1)'
+const DOT_COLOR = `rgba(${themeLight.accentRgb}, 0.1)`
 
 type BubbleKey = 'meetings' | 'ideas' | 'reflections' | 'todos' | 'conversations'
 
@@ -158,11 +159,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderRadius: BUBBLE_RADIUS,
-    shadowColor: '#000000',
+    shadowColor: themeLight.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -186,7 +187,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: themeLight.textPrimary,
     fontFamily: 'Satoshi-Medium',
   },
 })

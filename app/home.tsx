@@ -11,6 +11,7 @@ import RecordingActionsSheet from '../components/RecordingActionsSheet'
 import RecordingModal from '../components/RecordingModal'
 import FormatSelectionModal from '../components/FormatSelectionModal'
 import RenameModal from '../components/RenameModal'
+import { themeLight } from '../constants/theme'
 
 export default function Home() {
   const router = useRouter()
@@ -328,7 +329,7 @@ export default function Home() {
                     }}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Icon name="dots-three-vertical" size={20} color="#6B7280" />
+                    <Icon name="dots-three-vertical" size={20} color={themeLight.textSecondary} />
                   </Pressable>
                 </View>
               )}
@@ -445,7 +446,7 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.bgPrimary,
   },
   content: {
     flex: 1,
@@ -466,7 +467,7 @@ const styles = StyleSheet.create({
   },
   logo: {
     fontSize: 20,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     marginBottom: 8, // --space-2
   },
   // Empty State
@@ -483,11 +484,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     textAlign: 'center',
     marginBottom: 12, // --space-3
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   emptySubtext: {
     textAlign: 'center',
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     marginBottom: 12,
   },
   illustrationContainer: {
@@ -503,9 +504,9 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   bottomActionAreaContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.bgPrimary,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9', // --color-border-subtle
+    borderTopColor: themeLight.border,
   },
   bottomActionArea: {
     width: '100%',
@@ -534,25 +535,25 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
   },
   solidCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
   labelCard: {
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
+    backgroundColor: themeLight.bgSecondary,
     paddingHorizontal: 16, // --space-4
     paddingVertical: 12, // --space-3
     borderRadius: 10, // --radius-md
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
-    shadowColor: '#000000',
+    borderColor: themeLight.border,
+    shadowColor: themeLight.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -562,7 +563,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   labelText: {
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     fontSize: 14, // --font-size-sm
     fontWeight: '500', // --font-weight-medium
   },
@@ -572,7 +573,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: 16, // --space-4
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   listContent: {
     paddingBottom: 16,
@@ -582,7 +583,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9', // --color-border-subtle
+    borderBottomColor: themeLight.border,
   },
   recordingRowContent: {
     flex: 1,
@@ -595,10 +596,10 @@ const styles = StyleSheet.create({
   recordingTitle: {
     fontSize: 16,
     marginBottom: 4,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   recordingMeta: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
   },
   ellipsisButton: {
     padding: 8, // --space-2
@@ -618,12 +619,12 @@ const styles = StyleSheet.create({
   toastContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#16A34A', // --color-success
+    backgroundColor: themeLight.success,
     paddingHorizontal: 16, // --space-4
     paddingVertical: 12, // --space-3
     borderRadius: 10, // --radius-md
     gap: 8, // --space-2
-    shadowColor: '#000000',
+    shadowColor: themeLight.shadow,
     shadowOffset: {
       width: 0,
       height: 4,

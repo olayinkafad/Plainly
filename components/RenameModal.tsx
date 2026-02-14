@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { View, StyleSheet, Modal, Pressable, Animated, TextInput, Alert } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 import { Title, Body } from './typography'
 import Button from './Button'
 
@@ -110,7 +111,7 @@ export default function RenameModal({
               <View style={styles.headerContent}>
                 <Title style={styles.sheetTitle}>Rename recording</Title>
                 <Pressable onPress={onClose} style={styles.closeButton}>
-                  <Icon name="x" size={20} color="#6B7280" />
+                  <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
               </View>
             </View>
@@ -185,7 +186,7 @@ const styles = StyleSheet.create({
   sheetTitle: {
     flex: 1,
     fontSize: 18,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   closeButton: {
     padding: 8, // --space-2
@@ -200,21 +201,21 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
+    borderColor: themeLight.border,
     borderRadius: 10, // --radius-md
     paddingHorizontal: 16, // --space-4
     paddingVertical: 12, // --space-3
     fontSize: 16,
     fontFamily: 'Satoshi-Regular',
-    color: '#111827', // --color-text-primary
-    backgroundColor: '#FFFFFF',
+    color: themeLight.textPrimary,
+    backgroundColor: themeLight.cardBg,
     minHeight: 44,
   },
   inputError: {
-    borderColor: '#DC2626', // --color-error
+    borderColor: themeLight.error,
   },
   errorText: {
-    color: '#DC2626', // --color-error
+    color: themeLight.error,
     fontSize: 12,
     marginTop: 8, // --space-2
   },

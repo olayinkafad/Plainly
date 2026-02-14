@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { View, Text, Animated } from 'react-native'
 import Icon from './Icon'
+import { themeLight } from '../constants/theme'
 import Button from './Button'
 import { cn } from '../lib/utils'
 
@@ -82,7 +83,7 @@ export default function EmptyState({ onRecord, onUpload }: EmptyStateProps) {
           <Text className="text-white">Record</Text>
         </Button>
         <Button variant="secondary" fullWidth onPress={onUpload}>
-          <Icon name="upload" size={20} color="#111827" />
+          <Icon name="upload" size={20} color={themeLight.textPrimary} />
           <Text className="text-text-primary">Upload recording</Text>
         </Button>
       </View>

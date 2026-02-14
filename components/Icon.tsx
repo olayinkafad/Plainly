@@ -160,7 +160,7 @@ const getIconComponent = (name: string, variant: string): React.ComponentType<Sv
 export default function Icon({ 
   name, 
   size = 24, 
-  color = '#111827', 
+  color = '#2C2826', 
   variant = 'regular',
   style, 
   ...svgProps 
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   placeholder: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E8E0D8',
     borderRadius: 4,
   },
 })

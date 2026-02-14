@@ -8,6 +8,7 @@ import Button from './Button'
 import { OutputType } from '../types'
 import { recordingsStore, Recording } from '../store/recordings'
 import { format } from 'date-fns'
+import { themeLight } from '../constants/theme'
 
 interface FormatOption {
   key: OutputType
@@ -321,7 +322,7 @@ export default function FormatSelectionModal({
             {/* Header */}
             <View style={[styles.header, { paddingTop: 8 }]}>
               <Pressable onPress={onClose} style={styles.backButton}>
-                <Icon name="caret-left" size={24} color="#111827" />
+                <Icon name="caret-left" size={24} color={themeLight.textPrimary} />
               </Pressable>
             </View>
 
@@ -440,7 +441,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     width: '100%',
@@ -469,14 +470,14 @@ const styles = StyleSheet.create({
     padding: 16, // --space-4
     marginBottom: 20, // --space-5
     borderWidth: 1,
-    borderColor: '#F1F5F9', // --color-border-subtle
+    borderColor: themeLight.border,
   },
   audioPreviewHeader: {
     marginBottom: 12, // --space-3
   },
   audioPreviewTitle: {
     fontSize: 14,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     fontFamily: 'Satoshi-Medium',
   },
   audioPreviewControls: {
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12, // --space-3
@@ -500,13 +501,13 @@ const styles = StyleSheet.create({
   progressBar: {
     flex: 1,
     height: 4,
-    backgroundColor: '#E5E7EB', // --color-border-default
+    backgroundColor: themeLight.border,
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     borderRadius: 2,
   },
   timeContainer: {
@@ -515,15 +516,15 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 12,
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
   },
   title: {
     fontSize: 24,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
     marginBottom: 8, // --space-2
   },
   subtext: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
   },
   scrollContainer: {
@@ -533,18 +534,18 @@ const styles = StyleSheet.create({
     paddingBottom: 16, // --space-4
   },
   optionCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
+    borderColor: themeLight.border,
     borderRadius: 12, // --radius-md
     padding: 16, // --space-4
     marginBottom: 12, // --space-3
     minHeight: 80,
   },
   optionCardSelected: {
-    borderColor: '#2563EB', // --color-accent-primary
+    borderColor: themeLight.accent,
     borderWidth: 2,
-    backgroundColor: '#EFF6FF', // Light blue background
+    backgroundColor: themeLight.accentSubtle,
   },
   optionCardPressed: {
     opacity: 0.7,
@@ -560,18 +561,18 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     fontSize: 18,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary,
   },
   checkIcon: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   optionHelper: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14,
   },
   buttonContainer: {
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
     paddingTop: 16, // --space-4
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9', // --color-border-subtle
-    backgroundColor: '#FFFFFF',
+    backgroundColor: themeLight.cardBg,
     zIndex: 10,
   },
 })

@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useFonts } from 'expo-font'
 import * as SplashScreen from 'expo-splash-screen'
 import { View, ActivityIndicator } from 'react-native'
+import { themeLight } from '../constants/theme'
 
 // Keep the splash screen visible while we load fonts
 SplashScreen.preventAutoHideAsync()
@@ -33,8 +34,8 @@ export default function RootLayout() {
       // Don't render screens until fonts are loaded (or failed)
       if (!fontsLoaded && !fontError) {
         return (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-            <ActivityIndicator size="large" color="#2563EB" />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: themeLight.bgPrimary }}>
+            <ActivityIndicator size="large" color={themeLight.accent} />
           </View>
         )
       }

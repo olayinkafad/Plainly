@@ -2,6 +2,7 @@ import React from 'react'
 import { View, StyleSheet } from 'react-native'
 import { Title, Body, Meta } from './typography'
 import { StructuredSummary } from '../types'
+import { themeLight } from '../constants/theme'
 
 interface SummaryDisplayProps {
   summary: StructuredSummary
@@ -60,7 +61,7 @@ const styles = StyleSheet.create({
   },
   oneLineText: {
     fontSize: 20, // --font-size-lg
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary, // --color-text-primary
     lineHeight: 28,
     fontWeight: '600',
   },
@@ -77,13 +78,13 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#2563EB', // --color-accent-primary
+    backgroundColor: themeLight.accent,
     marginTop: 8,
     flexShrink: 0,
   },
   takeawayText: {
     flex: 1,
-    color: '#111827', // --color-text-primary
+    color: themeLight.textPrimary, // --color-text-primary
     fontSize: 14, // --font-size-sm
     lineHeight: 22,
   },
@@ -91,10 +92,10 @@ const styles = StyleSheet.create({
     marginBottom: 24, // --space-6
     paddingTop: 16, // --space-4
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB', // --color-border-default
+    borderTopColor: themeLight.border,
   },
   contextLabel: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 12, // --font-size-xs
     fontWeight: '600',
     marginBottom: 8, // --space-2
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   contextText: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 14, // --font-size-sm
     lineHeight: 20,
   },
@@ -112,7 +113,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#F1F5F9', // --color-border-subtle
   },
   confidenceText: {
-    color: '#6B7280', // --color-text-secondary
+    color: themeLight.textSecondary,
     fontSize: 12, // --font-size-xs
     lineHeight: 16,
     fontStyle: 'italic',
