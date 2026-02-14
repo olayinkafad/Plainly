@@ -140,16 +140,12 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
     <View style={styles.container}>
       <Pressable style={styles.playButton} onPress={togglePlayback}>
         {isPlaying ? (
-          <Icon name="pause" size={20} color="#FFFFFF" />
+          <Icon name="pause" size={18} color="#FFFFFF" />
         ) : (
-          <Icon name="play" size={20} color="#FFFFFF" />
+          <Icon name="play" size={18} color="#FFFFFF" />
         )}
       </Pressable>
       <View style={styles.scrubberContainer}>
-        <View style={styles.timeContainer}>
-          <Meta style={styles.timeText}>{formatTime(playbackPosition)}</Meta>
-          <Meta style={styles.timeText}>{formatTime(playbackDuration)}</Meta>
-        </View>
         <Pressable
           style={styles.scrubber}
           onPress={handleScrubberPress}
@@ -166,7 +162,12 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
             />
           </View>
         </Pressable>
+        <View style={styles.timeContainer}>
+          <Meta style={styles.timeText}>{formatTime(playbackPosition)}</Meta>
+          <Meta style={styles.timeText}>{formatTime(playbackDuration)}</Meta>
+        </View>
       </View>
+      <Body style={styles.speedLabel}>1x</Body>
     </View>
   )
 }
@@ -175,38 +176,29 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16, // --space-4
-    paddingHorizontal: 16, // --space-4
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: themeLight.bgSecondary,
-    borderBottomWidth: 1,
-    borderBottomColor: themeLight.border,
+    borderRadius: 12,
   },
   playButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: themeLight.accent,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: themeLight.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12, // --space-3
+    marginRight: 12,
   },
   scrubberContainer: {
     flex: 1,
   },
-  timeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8, // --space-2
-  },
-  timeText: {
-    fontSize: 12,
-    color: themeLight.textSecondary,
-  },
   scrubber: {
     width: '100%',
+    marginBottom: 6,
   },
   scrubberTrack: {
-    height: 4,
+    height: 3,
     backgroundColor: themeLight.border,
     borderRadius: 2,
     overflow: 'hidden',
@@ -215,5 +207,20 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: themeLight.accent,
     borderRadius: 2,
+  },
+  timeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  timeText: {
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans_500Medium',
+    color: themeLight.textSecondary,
+  },
+  speedLabel: {
+    fontSize: 13,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: themeLight.textSecondary,
+    marginLeft: 12,
   },
 })

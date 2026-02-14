@@ -13,12 +13,12 @@ export default function SummaryDisplay({ summary }: SummaryDisplayProps) {
 
   return (
     <View style={styles.container}>
-      {/* One-line summary - prominently displayed */}
+      {/* One-line summary */}
       <View style={styles.oneLineContainer}>
         <Title style={styles.oneLineText}>{one_line}</Title>
       </View>
 
-      {/* Key takeaways - as bullets with good spacing */}
+      {/* Key takeaways */}
       {key_takeaways.length > 0 && (
         <View style={styles.takeawaysContainer}>
           {key_takeaways.map((takeaway, index) => (
@@ -30,7 +30,7 @@ export default function SummaryDisplay({ summary }: SummaryDisplayProps) {
         </View>
       )}
 
-      {/* Context - secondary text if present */}
+      {/* Context */}
       {context && (
         <View style={styles.contextContainer}>
           <Meta style={styles.contextLabel}>Context</Meta>
@@ -38,7 +38,7 @@ export default function SummaryDisplay({ summary }: SummaryDisplayProps) {
         </View>
       )}
 
-      {/* Confidence notes footer - calm, only if applicable */}
+      {/* Confidence notes footer */}
       {(confidence_notes.possible_missed_words ||
         confidence_notes.mixed_language_detected ||
         confidence_notes.noisy_audio_suspected) && (
@@ -57,64 +57,63 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   oneLineContainer: {
-    marginBottom: 24, // --space-6
+    marginBottom: 16,
   },
   oneLineText: {
-    fontSize: 20, // --font-size-lg
-    color: themeLight.textPrimary, // --color-text-primary
-    lineHeight: 28,
-    fontWeight: '600',
+    fontSize: 24,
+    color: themeLight.textPrimary,
+    lineHeight: 34,
   },
   takeawaysContainer: {
-    marginBottom: 24, // --space-6
-    gap: 16, // --space-4
+    marginBottom: 16,
+    gap: 16,
   },
   takeawayItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12, // --space-3
+    gap: 12,
   },
   bullet: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: themeLight.accent,
-    marginTop: 8,
+    marginTop: 10,
     flexShrink: 0,
   },
   takeawayText: {
     flex: 1,
-    color: themeLight.textPrimary, // --color-text-primary
-    fontSize: 14, // --font-size-sm
-    lineHeight: 22,
+    color: themeLight.textPrimary,
+    fontSize: 16,
+    lineHeight: 26,
   },
   contextContainer: {
-    marginBottom: 24, // --space-6
-    paddingTop: 16, // --space-4
+    marginBottom: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: themeLight.border,
   },
   contextLabel: {
     color: themeLight.textSecondary,
-    fontSize: 12, // --font-size-xs
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 8, // --space-2
+    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   contextText: {
     color: themeLight.textSecondary,
-    fontSize: 14, // --font-size-sm
-    lineHeight: 20,
+    fontSize: 16,
+    lineHeight: 26,
   },
   confidenceFooter: {
-    paddingTop: 16, // --space-4
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9', // --color-border-subtle
+    borderTopColor: themeLight.borderSubtle,
   },
   confidenceText: {
     color: themeLight.textSecondary,
-    fontSize: 12, // --font-size-xs
+    fontSize: 12,
     lineHeight: 16,
     fontStyle: 'italic',
   },

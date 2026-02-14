@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, ScrollView, Pressable, Share, Alert, LayoutChangeEvent, Dimensions } from 'react-native'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { View, StyleSheet, ScrollView, Pressable, Share, Alert, Animated, Text } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import Icon from '../../components/Icon'
 import { format } from 'date-fns'
 import * as Clipboard from 'expo-clipboard'
@@ -18,6 +19,8 @@ import FormatActionSheet from '../../components/FormatActionSheet'
 import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput } from '../../types'
 import { themeLight } from '../../constants/theme'
 
+const TOOLTIP_STORAGE_KEY = '@plainly_tooltip_result_tabs_seen'
+
 const formatOptions: { key: OutputType; title: string }[] = [
   { key: 'summary', title: 'Summary' },
   { key: 'transcript', title: 'Transcript' },
@@ -29,20 +32,91 @@ export default function RecordingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const [recording, setRecording] = useState<Recording | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeFormat, setActiveFormat] = useState<OutputType | null>(null)
-  const [intendedFormat, setIntendedFormat] = useState<OutputType | null>(null)
+  const [activeFormat, setActiveFormat] = useState<OutputType>('summary')
   const [showActionsSheet, setShowActionsSheet] = useState(false)
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [showFormatActionSheet, setShowFormatActionSheet] = useState(false)
   const [formatActionType, setFormatActionType] = useState<'copy' | 'share' | null>(null)
   const hasAutoTitledRef = useRef(false)
-  const tabsScrollViewRef = useRef<ScrollView>(null)
-  const tabLayoutsRef = useRef<Map<OutputType, { x: number; width: number }>>(new Map())
+
+  // Toast state
+  const [showSavedToast, setShowSavedToast] = useState(false)
+  const savedToastAnim = useRef(new Animated.Value(0)).current
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Tooltip state
+  const [showTooltip, setShowTooltip] = useState(false)
+  const tooltipAnim = useRef(new Animated.Value(0)).current
+  const tabsYRef = useRef(0)
+
+  // Content crossfade
+  const contentOpacity = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
     loadRecording()
     hasAutoTitledRef.current = false
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
   }, [id])
+
+  // Toast + tooltip sequence after recording loads
+  useEffect(() => {
+    if (!recording) return
+
+    setShowSavedToast(true)
+    Animated.timing(savedToastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+
+    toastTimerRef.current = setTimeout(() => {
+      Animated.timing(savedToastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowSavedToast(false)
+        checkAndShowTooltip()
+      })
+    }, 2000)
+
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    }
+  }, [recording?.id])
+
+  const checkAndShowTooltip = async () => {
+    try {
+      const hasSeen = await AsyncStorage.getItem(TOOLTIP_STORAGE_KEY)
+      if (!hasSeen) {
+        setShowTooltip(true)
+        Animated.timing(tooltipAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }).start()
+      }
+    } catch {
+      // Fail silently
+    }
+  }
+
+  const dismissTooltip = useCallback(async () => {
+    try {
+      await AsyncStorage.setItem(TOOLTIP_STORAGE_KEY, 'true')
+    } catch {
+      // Fail silently
+    }
+    Animated.timing(tooltipAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowTooltip(false)
+    })
+  }, [tooltipAnim])
 
   const loadRecording = async () => {
     if (!id) return
@@ -53,29 +127,19 @@ export default function RecordingDetail() {
 
         const lastViewed = loadedRecording.lastViewedFormat
         if (lastViewed) {
-          setIntendedFormat(lastViewed)
           setActiveFormat(lastViewed)
         } else {
-          const availableFormats = getAvailableFormats(loadedRecording)
-          if (availableFormats.length > 0) {
-            setIntendedFormat(availableFormats[0])
-            setActiveFormat(availableFormats[0])
-          } else {
-            setIntendedFormat('summary')
-            setActiveFormat('summary')
-          }
+          setActiveFormat('summary')
         }
 
-        // Auto-generate title if needed (only once per recording)
+        // Auto-generate title if needed
         if (
           !hasAutoTitledRef.current &&
           loadedRecording.title === 'Recording' &&
           (loadedRecording.outputs.transcript || loadedRecording.outputs.summary)
         ) {
           hasAutoTitledRef.current = true
-          generateAutoTitle(loadedRecording).catch((error) => {
-            console.error('Auto-title generation failed:', error)
-          })
+          generateAutoTitle(loadedRecording).catch(console.error)
         }
       } else {
         setRecording(null)
@@ -125,34 +189,17 @@ export default function RecordingDetail() {
   }
 
   const getAvailableFormats = (rec: Recording): OutputType[] => {
-    const formats: OutputType[] = []
-    const otherFormats: OutputType[] = []
-    const hasOutputs = new Set<OutputType>()
-
-    const lastViewed = rec.lastViewedFormat
-
-    formatOptions.forEach((option) => {
+    const available: OutputType[] = []
+    for (const option of formatOptions) {
       if (rec.outputs[option.key]) {
-        hasOutputs.add(option.key)
-        if (option.key === lastViewed) {
-          formats.push(option.key)
-        } else {
-          otherFormats.push(option.key)
-        }
+        available.push(option.key)
       }
-    })
-
-    if (lastViewed && !hasOutputs.has(lastViewed) && !formats.includes(lastViewed)) {
-      formats.unshift(lastViewed)
     }
-
-    const orderedFormats = [...formats, ...otherFormats]
-
-    if (orderedFormats.length === 0 && intendedFormat) {
-      return [intendedFormat]
-    }
-
-    return orderedFormats
+    // Always show both tabs even if one has no data yet
+    if (available.length === 0) return ['summary', 'transcript']
+    if (!available.includes('summary')) available.unshift('summary')
+    if (!available.includes('transcript')) available.push('transcript')
+    return available
   }
 
   const formatRecordingTitle = (rec: Recording): string => {
@@ -160,17 +207,7 @@ export default function RecordingDetail() {
   }
 
   const formatRecordingSubtitle = (rec: Recording): string => {
-    const dateStr = format(rec.createdAt, 'MMM d, yyyy · h:mm a')
-    const hours = Math.floor(rec.durationSec / 3600)
-    const minutes = Math.floor((rec.durationSec % 3600) / 60)
-    const secs = Math.floor(rec.durationSec % 60)
-    let durationStr = ''
-    if (hours > 0) {
-      durationStr = `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    } else {
-      durationStr = `${minutes}:${secs.toString().padStart(2, '0')}`
-    }
-    return `${dateStr} · ${durationStr}`
+    return format(rec.createdAt, 'MMM d · h:mm a')
   }
 
   const handleRename = () => {
@@ -197,7 +234,7 @@ export default function RecordingDetail() {
 
     if (formatKey === 'transcript' && typeof output === 'object' && 'segments' in output) {
       const transcript = output as StructuredTranscript
-      return transcript.segments.map((s: { speaker: string; text: string }) => `${s.speaker}: ${s.text}`).join('\n\n')
+      return transcript.segments.map((s) => `${s.speaker}: ${s.text}`).join('\n\n')
     }
 
     if (formatKey === 'summary' && typeof output === 'object' && 'one_line' in output) {
@@ -205,7 +242,7 @@ export default function RecordingDetail() {
       const parts = [summary.one_line]
       if (summary.key_takeaways.length > 0) {
         parts.push('\n\nKey takeaways:')
-        parts.push(...summary.key_takeaways.map((t: string) => `• ${t}`))
+        parts.push(...summary.key_takeaways.map((t) => `• ${t}`))
       }
       if (summary.context) {
         parts.push(`\n\nContext: ${summary.context}`)
@@ -266,7 +303,7 @@ export default function RecordingDetail() {
     try {
       await Clipboard.setStringAsync(text)
       const formatTitle = formatOptions.find(opt => opt.key === fmt)?.title || 'content'
-      Alert.alert('Copied', `Copy ${formatTitle.toLowerCase()}`)
+      Alert.alert('Copied', `Copied ${formatTitle.toLowerCase()}`)
     } catch (error) {
       console.error('Failed to copy:', error)
       Alert.alert('Error', 'Failed to copy text')
@@ -357,28 +394,27 @@ export default function RecordingDetail() {
 
   const handleFormatSwitch = (fmt: OutputType) => {
     if (fmt === activeFormat || !recording) return
-    setActiveFormat(fmt)
-    recordingsStore.update(recording.id, {
-      lastViewedFormat: fmt,
-    }).catch(console.error)
 
-    setTimeout(() => {
-      const tabLayout = tabLayoutsRef.current.get(fmt)
-      if (tabLayout && tabsScrollViewRef.current) {
-        const { x, width } = tabLayout
-        const screenWidth = Dimensions.get('window').width
-        const scrollPosition = x - (screenWidth / 2) + (width / 2)
-        tabsScrollViewRef.current.scrollTo({
-          x: Math.max(0, scrollPosition),
-          animated: true,
-        })
-      }
-    }, 100)
-  }
+    // Dismiss tooltip if showing
+    if (showTooltip) {
+      dismissTooltip()
+    }
 
-  const handleTabLayout = (fmt: OutputType) => (event: LayoutChangeEvent) => {
-    const { x, width } = event.nativeEvent.layout
-    tabLayoutsRef.current.set(fmt, { x, width })
+    // Crossfade animation
+    Animated.timing(contentOpacity, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      setActiveFormat(fmt)
+      recordingsStore.update(recording.id, { lastViewedFormat: fmt }).catch(console.error)
+
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }).start()
+    })
   }
 
   const handleDeleteRecording = async () => {
@@ -391,6 +427,12 @@ export default function RecordingDetail() {
     }
   }
 
+  const handleTabsLayout = (event: any) => {
+    event.target.measureInWindow((_x: number, y: number) => {
+      tabsYRef.current = y
+    })
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -401,7 +443,7 @@ export default function RecordingDetail() {
     )
   }
 
-  if (!recording || !activeFormat || !intendedFormat) {
+  if (!recording) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.loadingContainer}>
@@ -420,6 +462,39 @@ export default function RecordingDetail() {
       return formatOutput && !isFormatUnavailable(key, formatOutput)
     })
 
+  const renderTabs = (onPress?: (fmt: OutputType) => void) => (
+    <View style={styles.tabsRow}>
+      {availableFormats.map((formatKey) => {
+        const option = formatOptions.find((opt) => opt.key === formatKey)
+        if (!option) return null
+        const isActive = activeFormat === formatKey
+        return (
+          <Pressable
+            key={formatKey}
+            style={[
+              styles.tab,
+              isActive && styles.tabActive,
+            ]}
+            onPress={() => (onPress || handleFormatSwitch)(formatKey)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
+            accessibilityLabel={option.title}
+          >
+            <Body
+              style={[
+                styles.tabText,
+                isActive && styles.tabTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {option.title}
+            </Body>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Top Navigation Bar */}
@@ -428,91 +503,72 @@ export default function RecordingDetail() {
           style={styles.navButton}
           onPress={() => router.push('/home')}
         >
-          <Icon name="caret-left" size={24} color={themeLight.textPrimary} />
+          <Icon name="x" size={24} color={themeLight.textPrimary} />
         </Pressable>
         <View style={styles.navSpacer} />
         <View style={styles.navActionsContainer}>
-          <Pressable
-            style={styles.navActionButton}
-            onPress={handleCopy}
-          >
-            <Icon name="copy" size={20} color={themeLight.textSecondary} />
+          <Pressable style={styles.navActionButton} onPress={handleCopy}>
+            <Icon name="copy" size={24} color={themeLight.textSecondary} />
           </Pressable>
-          <Pressable
-            style={styles.navActionButton}
-            onPress={handleShare}
-          >
-            <Icon name="share" size={20} color={themeLight.textSecondary} />
+          <Pressable style={styles.navActionButton} onPress={handleShare}>
+            <Icon name="share" size={24} color={themeLight.textSecondary} />
           </Pressable>
-        <Pressable
-          style={styles.navButton}
-          onPress={() => setShowActionsSheet(true)}
-        >
-          <Icon name="dots-three-vertical" size={24} color={themeLight.textPrimary} />
-        </Pressable>
+          <Pressable style={styles.navActionButton} onPress={() => setShowActionsSheet(true)}>
+            <Icon name="dots-three-vertical" size={24} color={themeLight.textSecondary} />
+          </Pressable>
         </View>
       </View>
 
-      {/* Title Container Section */}
+      {/* Saved Toast */}
+      {showSavedToast && (
+        <Animated.View
+          style={[
+            styles.savedToast,
+            {
+              opacity: savedToastAnim,
+              transform: [
+                {
+                  translateY: savedToastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Body style={styles.savedToastText}>Saved</Body>
+          <Icon name="check" size={16} color="#FFFFFF" />
+        </Animated.View>
+      )}
+
+      {/* Title Section */}
       <View style={styles.titleContainer}>
         <Title style={styles.titleText}>{formatRecordingTitle(recording)}</Title>
         <Meta style={styles.subtitleText}>{formatRecordingSubtitle(recording)}</Meta>
       </View>
 
-      {/* Audio Player Section */}
-      <AudioPlayer
-        audioUri={recording.audioBlobUrl}
-        durationSec={recording.durationSec}
-      />
+      {/* Audio Player */}
+      <View style={styles.audioPlayerContainer}>
+        <AudioPlayer
+          audioUri={recording.audioBlobUrl}
+          durationSec={recording.durationSec}
+        />
+      </View>
 
-      {/* Format Switcher Tabs */}
-      <View style={styles.tabsContainer}>
-        <ScrollView
-          ref={tabsScrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContent}
-        >
-          {availableFormats.map((formatKey) => {
-            const option = formatOptions.find((opt) => opt.key === formatKey)
-            if (!option) return null
-
-            const isActive = activeFormat === formatKey
-            return (
-              <Pressable
-                key={formatKey}
-                style={[
-                  styles.tab,
-                  isActive && styles.tabActive,
-                ]}
-                onPress={() => handleFormatSwitch(formatKey)}
-                onLayout={handleTabLayout(formatKey)}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-                accessibilityLabel={option.title}
-              >
-                <Body
-                  style={[
-                    styles.tabText,
-                    isActive && styles.tabTextActive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {option.title}
-                </Body>
-              </Pressable>
-            )
-          })}
-        </ScrollView>
+      {/* Format Tabs */}
+      <View style={styles.tabsContainer} onLayout={handleTabsLayout}>
+        {renderTabs()}
       </View>
 
       {/* Content Area */}
-      <View style={styles.contentWrapper}>
+      <Animated.View style={[styles.contentWrapper, { opacity: contentOpacity }]}>
         <ScrollView
           style={styles.contentScrollView}
           contentContainerStyle={styles.contentScrollContent}
         >
-            {(() => {
+          {(() => {
             const isUnavailable = isFormatUnavailable(activeFormat, output)
 
             if (isUnavailable) {
@@ -553,29 +609,59 @@ export default function RecordingDetail() {
             )
           })()}
         </ScrollView>
-      </View>
+      </Animated.View>
+
+      {/* First-Time Tooltip Overlay */}
+      {showTooltip && (
+        <Animated.View
+          style={[
+            styles.tooltipOverlay,
+            { opacity: tooltipAnim },
+          ]}
+        >
+          {/* Dim background */}
+          <Pressable style={styles.tooltipDim} onPress={dismissTooltip} />
+
+          {/* Spotlighted tabs */}
+          <View style={[styles.tooltipSpotlightTabs, { top: tabsYRef.current }]}>
+            {renderTabs((fmt) => {
+              handleFormatSwitch(fmt)
+            })}
+          </View>
+
+          {/* Tooltip box */}
+          <View style={[styles.tooltipBox, { top: tabsYRef.current + 52 }]}>
+            <View style={styles.tooltipArrow} />
+            <Text style={styles.tooltipText}>
+              <Text style={styles.tooltipBold}>Summary</Text>
+              {' shows the key points. '}
+              <Text style={styles.tooltipBold}>Transcript</Text>
+              {' has the full context of what you said.'}
+            </Text>
+            <Pressable style={styles.tooltipButton} onPress={dismissTooltip}>
+              <Body style={styles.tooltipButtonText}>Got it</Body>
+            </Pressable>
+          </View>
+        </Animated.View>
+      )}
 
       {/* Actions Sheet */}
-      {recording && (
-        <RecordingActionsSheet
-          isOpen={showActionsSheet}
-          recordingTitle={formatRecordingTitle(recording)}
-          audioUri={recording.audioBlobUrl}
-          onRename={handleRename}
-          onDelete={handleDeleteRecording}
-          onClose={() => setShowActionsSheet(false)}
-        />
-      )}
+      <RecordingActionsSheet
+        isOpen={showActionsSheet}
+        recordingTitle={formatRecordingTitle(recording)}
+        audioUri={recording.audioBlobUrl}
+        onRename={handleRename}
+        onDelete={handleDeleteRecording}
+        onClose={() => setShowActionsSheet(false)}
+      />
 
       {/* Rename Modal */}
-      {recording && (
-        <RenameModal
-          isOpen={showRenameModal}
-          currentTitle={recording.title || format(recording.createdAt, 'MMM d, yyyy')}
-          onSave={handleSaveRename}
-          onClose={() => setShowRenameModal(false)}
-        />
-      )}
+      <RenameModal
+        isOpen={showRenameModal}
+        currentTitle={recording.title || format(recording.createdAt, 'MMM d, yyyy')}
+        onSave={handleSaveRename}
+        onClose={() => setShowRenameModal(false)}
+      />
 
       {/* Format Action Sheet */}
       {formatActionType && (
@@ -610,18 +696,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+
+  // Top bar
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    maxWidth: 420,
-    width: '100%',
-    alignSelf: 'center',
   },
   navButton: {
     width: 44,
@@ -635,69 +718,97 @@ const styles = StyleSheet.create({
   navActionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 16,
   },
   navActionButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    maxWidth: 420,
-    width: '100%',
+
+  // Saved toast
+  savedToast: {
+    position: 'absolute',
+    top: 70,
     alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeLight.success,
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    gap: 8,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  savedToastText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFFFFF',
+  },
+
+  // Title
+  titleContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   titleText: {
-    fontSize: 20,
+    fontSize: 24,
     color: themeLight.textPrimary,
     marginBottom: 4,
   },
   subtitleText: {
-    fontSize: 12,
+    fontSize: 13,
     color: themeLight.textSecondary,
   },
-  tabsContainer: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    width: '100%',
-    paddingVertical: 12,
+
+  // Audio player wrapper
+  audioPlayerContainer: {
+    paddingHorizontal: 20,
   },
-  tabsContent: {
-    paddingHorizontal: 16,
-    paddingRight: 16,
-    alignItems: 'center',
+
+  // Tabs
+  tabsContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  tabsRow: {
+    flexDirection: 'row',
     gap: 8,
   },
   tab: {
-    paddingVertical: 8,
+    flex: 1,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 24,
     backgroundColor: themeLight.bgSecondary,
-    borderWidth: 1,
-    borderColor: themeLight.border,
-    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
+    minHeight: 40,
   },
   tabActive: {
     backgroundColor: themeLight.accent,
-    borderColor: themeLight.accent,
+    shadowColor: themeLight.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 15,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
     color: themeLight.textSecondary,
-    fontFamily: 'PlusJakartaSans_500Medium',
   },
   tabTextActive: {
     color: themeLight.tabActiveText,
   },
+
+  // Content
   contentWrapper: {
     flex: 1,
   },
@@ -708,24 +819,18 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   contentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 24,
-    maxWidth: 420,
-    width: '100%',
-    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   outputText: {
     color: themeLight.textPrimary,
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 26,
   },
   emptyContentContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 48,
     paddingBottom: 48,
-    maxWidth: 420,
-    width: '100%',
-    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 300,
@@ -750,5 +855,70 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     paddingHorizontal: 16,
+  },
+
+  // Tooltip overlay
+  tooltipOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2000,
+  },
+  tooltipDim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  tooltipSpotlightTabs: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    zIndex: 2001,
+  },
+  tooltipBox: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    backgroundColor: themeLight.textPrimary,
+    borderRadius: 12,
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    zIndex: 2001,
+  },
+  tooltipArrow: {
+    position: 'absolute',
+    top: -8,
+    alignSelf: 'center',
+    left: '50%',
+    marginLeft: -8,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderBottomWidth: 8,
+    borderStyle: 'solid',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: themeLight.textPrimary,
+  },
+  tooltipText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    lineHeight: 20,
+    marginBottom: 12,
+    fontFamily: 'PlusJakartaSans_400Regular',
+  },
+  tooltipBold: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+  },
+  tooltipButton: {
+    backgroundColor: themeLight.bgSecondary,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    alignSelf: 'center',
+  },
+  tooltipButtonText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: themeLight.textPrimary,
   },
 })
