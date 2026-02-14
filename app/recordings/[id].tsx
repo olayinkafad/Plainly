@@ -212,12 +212,7 @@ export default function RecordingDetail() {
       if (loadedRecording) {
         setRecording(loadedRecording)
 
-        const lastViewed = loadedRecording.lastViewedFormat
-        if (lastViewed) {
-          setActiveFormat(lastViewed)
-        } else {
-          setActiveFormat('transcript')
-        }
+        setActiveFormat('summary')
 
         // Auto-generate title if needed
         if (
@@ -728,6 +723,7 @@ export default function RecordingDetail() {
       <View style={styles.audioPlayerContainer}>
         <AudioPlayer
           ref={audioPlayerRef}
+          recordingId={recording.id}
           audioUri={recording.audioBlobUrl}
           durationSec={recording.durationSec}
         />

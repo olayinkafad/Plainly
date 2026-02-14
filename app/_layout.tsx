@@ -5,6 +5,7 @@ import { useFonts } from 'expo-font'
 import * as SplashScreen from 'expo-splash-screen'
 import { View, ActivityIndicator } from 'react-native'
 import { themeLight } from '../constants/theme'
+import { AudioPlayerProvider } from '../contexts/AudioPlayerContext'
 import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold'
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display/700Bold'
 import { PlusJakartaSans_400Regular } from '@expo-google-fonts/plus-jakarta-sans/400Regular'
@@ -51,7 +52,9 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }} />
+      <AudioPlayerProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </AudioPlayerProvider>
     </SafeAreaProvider>
   )
 }

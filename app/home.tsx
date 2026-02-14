@@ -4,7 +4,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync, getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio'
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio'
+import { useSharedAudioPlayer } from '../contexts/AudioPlayerContext'
 import Icon from '../components/Icon'
 import { format } from 'date-fns'
 import { Title, Body, Meta } from '../components/typography'
@@ -73,6 +74,36 @@ function PulsingDot() {
   )
 }
 
+// Animated equaliser bars for playing state
+function EqualizerBars() {
+  const bar1 = useRef(new Animated.Value(0.4)).current
+  const bar2 = useRef(new Animated.Value(0.8)).current
+  const bar3 = useRef(new Animated.Value(0.5)).current
+
+  useEffect(() => {
+    const animate = (val: Animated.Value, dur: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(val, { toValue: 1, duration: dur, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(val, { toValue: 0.3, duration: dur, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      )
+    const a1 = animate(bar1, 400)
+    const a2 = animate(bar2, 500)
+    const a3 = animate(bar3, 350)
+    a1.start(); a2.start(); a3.start()
+    return () => { a1.stop(); a2.stop(); a3.stop() }
+  }, [bar1, bar2, bar3])
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 12, width: 12 }}>
+      <Animated.View style={{ width: 2, borderRadius: 1, backgroundColor: '#FFFFFF', height: 12, transform: [{ scaleY: bar1 }] }} />
+      <Animated.View style={{ width: 2, borderRadius: 1, backgroundColor: '#FFFFFF', height: 12, transform: [{ scaleY: bar2 }] }} />
+      <Animated.View style={{ width: 2, borderRadius: 1, backgroundColor: '#FFFFFF', height: 12, transform: [{ scaleY: bar3 }] }} />
+    </View>
+  )
+}
+
 export default function Home() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -107,11 +138,8 @@ export default function Home() {
   const milestoneToastAnim = useRef(new Animated.Value(0)).current
   const milestoneToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // ── Mini Player State ──
-  const SPEED_OPTIONS = [1, 1.5, 2, 0.5] as const
-  const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null)
-  const [playbackSpeed, setPlaybackSpeed] = useState(1)
-  const [miniPlayerVisible, setMiniPlayerVisible] = useState(false)
+  // ── Shared Audio Player ──
+  const audio = useSharedAudioPlayer()
   const scrubberWidthRef = useRef(200)
 
   // ── Breathing Mic Animation ──
@@ -119,10 +147,6 @@ export default function Home() {
   const innerButtonScale = useRef(new Animated.Value(1)).current
   const breathingLoopRef = useRef<Animated.CompositeAnimation | null>(null)
   const isScrollingRef = useRef(false)
-
-  // expo-audio hooks for mini player
-  const player = useAudioPlayer(null)
-  const playerStatus = useAudioPlayerStatus(player)
 
   useEffect(() => {
     loadRecordings()
@@ -146,13 +170,6 @@ export default function Home() {
       if (milestoneToastTimerRef.current) clearTimeout(milestoneToastTimerRef.current)
     }
   }, [params.deleted])
-
-  // Handle didJustFinish — expo-audio does NOT auto-reset position
-  useEffect(() => {
-    if (playerStatus.didJustFinish) {
-      player.seekTo(0)
-    }
-  }, [playerStatus.didJustFinish, player])
 
   const loadRecordings = async () => {
     try {
@@ -213,9 +230,9 @@ export default function Home() {
   }
 
   const handleRecord = async () => {
-    // Close mini player if open
-    if (miniPlayerVisible) {
-      closeMiniPlayer()
+    // Stop any playing audio before recording
+    if (audio.playingRecordingId) {
+      audio.close()
     }
     const { status } = await getRecordingPermissionsAsync()
     if (status === 'undetermined') {
@@ -352,9 +369,9 @@ export default function Home() {
 
   const handleDeleteRecording = async (id: string) => {
     try {
-      // Close mini player if this recording is playing
-      if (playingRecordingId === id) {
-        closeMiniPlayer()
+      // Stop playback if this recording is playing
+      if (audio.playingRecordingId === id) {
+        audio.close()
       }
       await recordingsStore.delete(id)
 
@@ -464,69 +481,16 @@ export default function Home() {
 
   // ── Mini Player Functions ──
 
-  const loadAndPlayRecording = async (rec: Recording) => {
-    // If same recording, just toggle
-    if (playingRecordingId === rec.id) {
-      togglePlayback()
-      return
-    }
-
-    try {
-      await setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-      })
-
-      player.replace({ uri: rec.audioBlobUrl })
-      player.play()
-
-      setPlayingRecordingId(rec.id)
-      setPlaybackSpeed(1)
-
-      if (!miniPlayerVisible) {
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-        setMiniPlayerVisible(true)
-      }
-    } catch (error) {
-      console.error('Failed to load audio:', error)
-    }
-  }
-
-  const togglePlayback = () => {
-    if (playerStatus.playing) {
-      player.pause()
-    } else {
-      const currentSec = playerStatus.currentTime ?? 0
-      const totalSec = playerStatus.duration ?? 0
-      if (totalSec > 0 && currentSec >= totalSec - 0.1) {
-        player.seekTo(0)
-      }
-      player.play()
-    }
-  }
-
-  const handleScrubberPress = (event: any) => {
+  const handleMiniScrubberPress = (event: any) => {
     const { locationX } = event.nativeEvent
     const pct = locationX / scrubberWidthRef.current
-    const totalSec = playerStatus.duration ?? 0
-    player.seekTo(Math.max(0, Math.min(pct * totalSec, totalSec)))
-  }
-
-  const cycleSpeed = () => {
-    const currentIndex = SPEED_OPTIONS.indexOf(playbackSpeed as typeof SPEED_OPTIONS[number])
-    const nextIndex = (currentIndex + 1) % SPEED_OPTIONS.length
-    const nextSpeed = SPEED_OPTIONS[nextIndex]
-    setPlaybackSpeed(nextSpeed)
-    player.setPlaybackRate(nextSpeed)
+    const totalSec = audio.duration ?? 0
+    audio.seekTo(Math.max(0, Math.min(pct * totalSec, totalSec)))
   }
 
   const closeMiniPlayer = () => {
-    player.pause()
-    player.replace(null)
-    setPlayingRecordingId(null)
-    setPlaybackSpeed(1)
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
-    setMiniPlayerVisible(false)
+    audio.close()
   }
 
   // ── Breathing Mic Animation ──
@@ -766,33 +730,33 @@ export default function Home() {
         /* ── List State ── */
         <View style={styles.contentWrapper}>
           <View style={styles.contentArea}>
-            {/* Mini Audio Player */}
-            {miniPlayerVisible && (
+            {/* Mini Audio Player — shows when audio is playing from any screen */}
+            {audio.playingRecordingId && (
               <View style={styles.miniPlayer}>
-                <Pressable style={styles.miniPlayButton} onPress={togglePlayback}>
-                  <Icon name={playerStatus.playing ? 'pause' : 'play'} size={16} color="#FFFFFF" />
+                <Pressable style={styles.miniPlayButton} onPress={audio.togglePlayback}>
+                  <Icon name={audio.isPlaying ? 'pause' : 'play'} size={16} color="#FFFFFF" />
                 </Pressable>
                 <Body style={[styles.miniTimeText, { marginLeft: 12 }]}>
-                  {formatTimeMs((playerStatus.currentTime ?? 0) * 1000)}
+                  {formatTimeMs(audio.currentTime * 1000)}
                 </Body>
                 <Pressable
                   style={styles.miniProgressTrack}
-                  onPress={handleScrubberPress}
+                  onPress={handleMiniScrubberPress}
                   onLayout={(e) => { scrubberWidthRef.current = e.nativeEvent.layout.width }}
                 >
                   <View
                     style={[
                       styles.miniProgressFill,
-                      { width: `${(playerStatus.duration ?? 0) > 0 ? ((playerStatus.currentTime ?? 0) / (playerStatus.duration ?? 1)) * 100 : 0}%` },
+                      { width: `${audio.duration > 0 ? (audio.currentTime / audio.duration) * 100 : 0}%` },
                     ]}
                   />
                 </Pressable>
                 <Body style={styles.miniTimeText}>
-                  {formatTimeMs((playerStatus.duration ?? 0) * 1000)}
+                  {formatTimeMs(audio.duration * 1000)}
                 </Body>
-                <Pressable style={styles.miniSpeedPill} onPress={cycleSpeed}>
+                <Pressable style={styles.miniSpeedPill} onPress={audio.cycleSpeed}>
                   <Body style={styles.miniSpeedText}>
-                    {playbackSpeed === 1 ? '1x' : playbackSpeed === 0.5 ? '0.5x' : `${playbackSpeed}x`}
+                    {audio.playbackSpeed === 1 ? '1x' : audio.playbackSpeed === 0.5 ? '0.5x' : `${audio.playbackSpeed}x`}
                   </Body>
                 </Pressable>
                 <Pressable
@@ -818,10 +782,11 @@ export default function Home() {
               renderItem={({ item }) => {
                 const isProcessing = item.status === 'processing'
                 const isFailed = item.status === 'failed'
+                const isNowPlaying = audio.playingRecordingId === item.id
 
                 return (
                   <Pressable
-                    style={styles.card}
+                    style={[styles.card, isNowPlaying && styles.cardPlaying]}
                     onPress={() => handleRecordingPress(item)}
                   >
                     <View style={styles.cardHeader}>
@@ -856,20 +821,23 @@ export default function Home() {
                     )}
                     {!isProcessing && (
                       <Pressable
-                        style={styles.replayButton}
+                        style={[styles.replayButton, isNowPlaying && styles.replayButtonPlaying]}
                         onPress={(e) => {
                           e?.stopPropagation?.()
-                          loadAndPlayRecording(item)
+                          handleRecordingPress(item)
                         }}
                       >
-                        <Body style={styles.replayButtonText}>
-                          {playingRecordingId === item.id && playerStatus.playing ? 'Pause' : 'Play'}
-                        </Body>
-                        <Icon
-                          name={playingRecordingId === item.id && playerStatus.playing ? 'pause' : 'play'}
-                          size={12}
-                          color="#FFFFFF"
-                        />
+                        {isNowPlaying ? (
+                          <>
+                            <Body style={styles.replayButtonText}>Playing</Body>
+                            <EqualizerBars />
+                          </>
+                        ) : (
+                          <>
+                            <Body style={styles.replayButtonText}>View</Body>
+                            <Icon name="arrow-right" size={12} color="#FFFFFF" />
+                          </>
+                        )}
                       </Pressable>
                     )}
                   </Pressable>
@@ -1094,6 +1062,10 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1,
   },
+  cardPlaying: {
+    borderLeftWidth: 3,
+    borderLeftColor: themeLight.accent,
+  },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1156,6 +1128,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 6,
+  },
+  replayButtonPlaying: {
+    backgroundColor: themeLight.accent,
   },
   replayButtonText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
