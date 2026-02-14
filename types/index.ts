@@ -31,12 +31,16 @@ export interface SummaryConfidenceNotes {
   reason: string | null
 }
 
+export interface SummaryKeyPoint {
+  lead: string
+  detail: string
+}
+
 export interface StructuredSummary {
   format: 'summary'
-  language_detected: string
-  one_line: string
-  key_takeaways: string[]
-  context: string | null
+  gist: string
+  key_points: SummaryKeyPoint[]
+  follow_ups?: string[]
   confidence_notes: SummaryConfidenceNotes
 }
 

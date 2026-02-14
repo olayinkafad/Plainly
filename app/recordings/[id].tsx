@@ -192,7 +192,7 @@ export default function RecordingDetail() {
         if (typeof rec.outputs.summary === 'string') {
           summary = rec.outputs.summary
         } else {
-          summary = rec.outputs.summary.one_line
+          summary = rec.outputs.summary.gist
         }
       }
 
@@ -269,15 +269,16 @@ export default function RecordingDetail() {
       return transcript.segments.map((s) => `${s.speaker}: ${s.text}`).join('\n\n')
     }
 
-    if (formatKey === 'summary' && typeof output === 'object' && 'one_line' in output) {
+    if (formatKey === 'summary' && typeof output === 'object' && 'gist' in output) {
       const summary = output as StructuredSummary
-      const parts = [summary.one_line]
-      if (summary.key_takeaways.length > 0) {
-        parts.push('\n\nKey takeaways:')
-        parts.push(...summary.key_takeaways.map((t) => `• ${t}`))
+      const parts = [summary.gist]
+      if (summary.key_points.length > 0) {
+        parts.push('\n\nKey points:')
+        parts.push(...summary.key_points.map((p) => `\u2022 ${p.lead} \u2014 ${p.detail}`))
       }
-      if (summary.context) {
-        parts.push(`\n\nContext: ${summary.context}`)
+      if (summary.follow_ups && summary.follow_ups.length > 0) {
+        parts.push('\n\nFollow-ups:')
+        parts.push(...summary.follow_ups.map((f) => `\u25CB ${f}`))
       }
       return parts.join('\n')
     }
@@ -308,7 +309,7 @@ export default function RecordingDetail() {
     if (typeof output === 'string') {
       try {
         const parsed = JSON.parse(output)
-        if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
+        if (parsed.format === 'summary' && parsed.gist && Array.isArray(parsed.key_points)) {
           return parsed as StructuredSummary
         }
       } catch {
@@ -418,8 +419,8 @@ export default function RecordingDetail() {
 
     if (typeof output === 'object') {
       if (fmt === 'summary' && output.format === 'summary') {
-        if (!output.one_line || !output.one_line.trim()) return true
-        if (!Array.isArray(output.key_takeaways) || output.key_takeaways.length === 0) return true
+        if (!output.gist || !output.gist.trim()) return true
+        if (!Array.isArray(output.key_points) || output.key_points.length === 0) return true
         return false
       }
 

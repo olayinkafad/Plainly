@@ -70,7 +70,7 @@ export default function Generating() {
       let summary: StructuredSummary | string = outputsResult.summary
       try {
         const parsed = JSON.parse(outputsResult.summary)
-        if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
+        if (parsed.format === 'summary' && parsed.gist && Array.isArray(parsed.key_points)) {
           summary = parsed as StructuredSummary
         }
       } catch {

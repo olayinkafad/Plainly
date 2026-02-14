@@ -31,7 +31,7 @@ const formatPrompts: Record<string, string> = {
     'Transform this transcript into a structured JSON format. Rules: Do NOT add or remove meaning. Do NOT invent speaker labels. Only label speakers if diarization is explicitly available. If diarization is not available, use a single speaker label "User" for all text. Preserve the original language and phrasing. Break into short segments (1-3 sentences each). Only remove obvious filler words (um, uh, like, you know) if they do not change meaning (be conservative). Return ONLY valid JSON in this exact format: {"format":"transcript","language_detected":"string","speaker_separation":"provided"|"not_available","segments":[{"speaker":"string","text":"string"}],"confidence_notes":{"possible_missed_words":boolean,"mixed_language_detected":boolean,"noisy_audio_suspected":boolean,"reason":"string|null"}}',
 
   summary:
-    'Transform this transcript into a structured summary JSON. Rules: Do NOT invent facts, names, dates, or decisions. If something is unclear or ambiguous, omit it rather than guessing. Preserve the language of the recording. Return ONLY valid JSON in this exact format: {"format":"summary","language_detected":"string","one_line":"string (max 140 chars)","key_takeaways":["string"],"context":"string|null","confidence_notes":{"possible_missed_words":boolean,"mixed_language_detected":boolean,"noisy_audio_suspected":boolean,"reason":"string|null"}}. one_line: a single clear sentence (max 140 characters). key_takeaways: 3-6 short bullets, each focused on one idea. context: only include if it genuinely adds clarity; otherwise null. confidence_notes.reason: short, human explanation only if one of the booleans is true.',
+    'You are a summary engine for voice recordings. Given a raw transcript, produce a JSON object with this exact schema: {"format":"summary","gist":"1-2 sentences capturing what this recording is about and the main takeaway","key_points":[{"lead":"Key concept","detail":"supporting detail using the user\'s own words"}],"follow_ups":["specific action item the user mentioned"],"confidence_notes":{"possible_missed_words":false,"mixed_language_detected":false,"noisy_audio_suspected":false,"reason":null}}. Rules: Detect recording type and adapt tone. The gist should be in the user\'s voice. key_points: 2-5 items, each with a lead (2-4 word key concept) and detail (supporting context). follow_ups: ONLY include if the user explicitly mentioned actions or tasks — omit the field entirely if none detected. Anti-hallucination: only include information explicitly stated. Never invent names, dates, places. If recording is too short or unclear, return gist "Short recording — not enough to summarize." with empty key_points. When in doubt, leave it out. Return ONLY valid JSON.',
 }
 
 // Custom Whisper transcription using native https (node-fetch has issues on Node 24)
@@ -251,12 +251,10 @@ async function generateStructuredSummary(processedTranscript: string): Promise<a
     structuredSummary = JSON.parse(responseText)
 
     if (!structuredSummary.format) structuredSummary.format = 'summary'
-    if (!structuredSummary.language_detected) structuredSummary.language_detected = 'en'
-    if (!structuredSummary.one_line) structuredSummary.one_line = 'Summary unavailable'
-    if (!Array.isArray(structuredSummary.key_takeaways)) {
-      structuredSummary.key_takeaways = []
+    if (!structuredSummary.gist) structuredSummary.gist = 'Summary unavailable'
+    if (!Array.isArray(structuredSummary.key_points)) {
+      structuredSummary.key_points = []
     }
-    if (structuredSummary.context === undefined) structuredSummary.context = null
     if (!structuredSummary.confidence_notes) {
       structuredSummary.confidence_notes = {
         possible_missed_words: false,
@@ -265,17 +263,15 @@ async function generateStructuredSummary(processedTranscript: string): Promise<a
         reason: null,
       }
     }
-    if (structuredSummary.one_line.length > 140) {
-      structuredSummary.one_line = structuredSummary.one_line.substring(0, 137) + '...'
+    if (structuredSummary.gist.length > 300) {
+      structuredSummary.gist = structuredSummary.gist.substring(0, 297) + '...'
     }
   } catch (parseError) {
     console.error('Failed to parse structured summary, using fallback:', parseError)
     structuredSummary = {
       format: 'summary',
-      language_detected: 'en',
-      one_line: 'Summary unavailable',
-      key_takeaways: [],
-      context: null,
+      gist: 'Summary unavailable',
+      key_points: [],
       confidence_notes: {
         possible_missed_words: false,
         mixed_language_detected: false,

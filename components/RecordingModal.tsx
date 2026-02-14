@@ -715,8 +715,8 @@ export default function RecordingModal({
       })
 
       // Auto-generate title in background
-      const summaryText = typeof summary === 'object' && 'one_line' in summary
-        ? summary.one_line
+      const summaryText = typeof summary === 'object' && 'gist' in summary
+        ? summary.gist
         : typeof summary === 'string' ? summary : undefined
 
       generateRecordingTitle(transcript, summaryText)

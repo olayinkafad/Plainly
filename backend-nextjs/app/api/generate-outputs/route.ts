@@ -10,13 +10,15 @@ const openai = new OpenAI({
 
 const MAX_TRANSCRIPT_CHARS = 50000
 
-const SUMMARY_PROMPT = `You are a precise summarisation engine. Given a raw transcript, produce a JSON object with this exact schema:
+const SUMMARY_PROMPT = `You are a summary engine for voice recordings. Given a raw transcript, produce a JSON object with this exact schema:
 
 {
   "format": "summary",
-  "one_line": "A single sentence capturing the core idea (max 120 chars)",
-  "key_takeaways": ["takeaway 1", "takeaway 2", "takeaway 3"],
-  "context": "Optional sentence about setting/participants, or null",
+  "gist": "1-2 sentences capturing what this recording is about and the main takeaway",
+  "key_points": [
+    { "lead": "Key concept", "detail": "supporting detail using the user's own words" }
+  ],
+  "follow_ups": ["specific action item the user mentioned"],
   "confidence_notes": {
     "possible_missed_words": false,
     "mixed_language_detected": false,
@@ -26,13 +28,24 @@ const SUMMARY_PROMPT = `You are a precise summarisation engine. Given a raw tran
 }
 
 Rules:
-- Do not add new information
-- Preserve original meaning
-- Remove filler words
-- Be concise and structured
-- If unsure, say so explicitly in confidence_notes
-- key_takeaways should have 2-5 items
-- Return ONLY valid JSON, no markdown or extra text`
+- Detect the recording type (meeting, reflection, idea, to-do, conversation) and adapt tone
+- The gist should be in the user's voice — "You talked about weekend plans" not "The subject discussed various weekend activities"
+- key_points: 2-5 items. Each has a "lead" (the key concept, 2-4 words) and "detail" (supporting context using the user's own words, cleaned up for readability)
+- follow_ups: ONLY include if the user explicitly mentioned actions, tasks, or things to do. "I should probably call him" counts. Silence on a topic does NOT become a follow-up. Omit the field entirely if no follow-ups were detected
+- Keep the entire summary scannable — the lead values alone should tell the story
+
+Anti-hallucination rules:
+- Only include information explicitly stated in the transcript
+- If the user said "maybe cook something," write "maybe cook something" — not "planning to cook pasta"
+- Never invent names, dates, times, places, or numbers not in the transcript
+- Never add context the user didn't provide. "call Mum" stays as "call Mum" — don't expand it
+- If the recording is vague or incomplete, the summary should be short and vague too
+- A 10-second ramble should produce a 1-2 line gist with minimal key_points, not a detailed breakdown
+- For follow_ups, only list items the user explicitly said they need to do
+- When in doubt, leave it out. Shorter and accurate beats longer and invented
+- If the recording is too short or unclear, return: {"format":"summary","gist":"Short recording — not enough to summarize.","key_points":[],"confidence_notes":{...}}
+
+Return ONLY valid JSON, no markdown or extra text.`
 
 const TRANSCRIPT_PROMPT = `You are a transcript structuring engine. Given a raw transcript, produce a JSON object with this exact schema:
 
