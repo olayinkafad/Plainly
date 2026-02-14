@@ -798,9 +798,7 @@ const styles = StyleSheet.create({
   },
 
   // Audio player wrapper
-  audioPlayerContainer: {
-    paddingHorizontal: 20,
-  },
+  audioPlayerContainer: {},
 
   // Tabs
   tabsContainer: {

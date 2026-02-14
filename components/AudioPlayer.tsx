@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { View, StyleSheet, Pressable } from 'react-native'
 import { Audio } from 'expo-av'
 import Icon from './Icon'
-import { Body, Meta } from './typography'
+import { Body } from './typography'
 import { themeLight } from '../constants/theme'
 
 interface AudioPlayerProps {
@@ -10,12 +10,16 @@ interface AudioPlayerProps {
   durationSec: number
 }
 
+const SPEED_OPTIONS = [1, 1.5, 2, 0.5]
+
 export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps) {
   const [sound, setSound] = useState<Audio.Sound | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackPosition, setPlaybackPosition] = useState(0)
   const [playbackDuration, setPlaybackDuration] = useState(0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const positionUpdateInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scrubberWidthRef = useRef(200)
 
   useEffect(() => {
     loadAudio()
@@ -71,7 +75,6 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
     if (!sound) return
 
     try {
-      const status = await sound.getStatusAsync()
       if (isPlaying) {
         await sound.pauseAsync()
         setIsPlaying(false)
@@ -80,6 +83,7 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
           positionUpdateInterval.current = null
         }
       } else {
+        const status = await sound.getStatusAsync()
         if (status.isLoaded) {
           const currentPosition = status.positionMillis || 0
           const duration = status.durationMillis || playbackDuration
@@ -106,26 +110,28 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
     }
   }
 
-  const scrubberWidthRef = useRef(300)
-
-  const handleScrubberLayout = (event: any) => {
-    const { width } = event.nativeEvent.layout
-    scrubberWidthRef.current = width
-  }
-
   const handleScrubberPress = async (event: any) => {
     if (!sound) return
-
     try {
       const { locationX } = event.nativeEvent
-      const scrubberWidth = scrubberWidthRef.current
-      const percentage = locationX / scrubberWidth
-      const newPosition = percentage * playbackDuration
-
-      await sound.setPositionAsync(Math.max(0, Math.min(newPosition, playbackDuration)))
-      setPlaybackPosition(Math.max(0, Math.min(newPosition, playbackDuration)))
+      const percentage = locationX / scrubberWidthRef.current
+      const newPos = percentage * playbackDuration
+      await sound.setPositionAsync(Math.max(0, Math.min(newPos, playbackDuration)))
+      setPlaybackPosition(Math.max(0, Math.min(newPos, playbackDuration)))
     } catch (error) {
       console.error('Failed to scrub:', error)
+    }
+  }
+
+  const cycleSpeed = async () => {
+    if (!sound) return
+    const currentIndex = SPEED_OPTIONS.indexOf(playbackSpeed)
+    const nextSpeed = SPEED_OPTIONS[(currentIndex + 1) % SPEED_OPTIONS.length]
+    try {
+      await sound.setRateAsync(nextSpeed, true)
+      setPlaybackSpeed(nextSpeed)
+    } catch (error) {
+      console.error('Failed to change speed:', error)
     }
   }
 
@@ -136,50 +142,49 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
+  const formatSpeedLabel = (speed: number): string => {
+    if (speed === 0.5) return '0.5x'
+    if (speed === 1) return '1x'
+    return `${speed}x`
+  }
+
   return (
     <View style={styles.container}>
       <Pressable style={styles.playButton} onPress={togglePlayback}>
-        {isPlaying ? (
-          <Icon name="pause" size={18} color="#FFFFFF" />
-        ) : (
-          <Icon name="play" size={18} color="#FFFFFF" />
-        )}
+        <Icon name={isPlaying ? 'pause' : 'play'} size={16} color="#FFFFFF" />
       </Pressable>
-      <View style={styles.scrubberContainer}>
-        <Pressable
-          style={styles.scrubber}
-          onPress={handleScrubberPress}
-          onLayout={handleScrubberLayout}
-        >
-          <View style={styles.scrubberTrack}>
-            <View
-              style={[
-                styles.scrubberFill,
-                {
-                  width: `${playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0}%`,
-                },
-              ]}
-            />
-          </View>
-        </Pressable>
-        <View style={styles.timeContainer}>
-          <Meta style={styles.timeText}>{formatTime(playbackPosition)}</Meta>
-          <Meta style={styles.timeText}>{formatTime(playbackDuration)}</Meta>
-        </View>
-      </View>
-      <Body style={styles.speedLabel}>1x</Body>
+      <Body style={styles.timeText}>{formatTime(playbackPosition)}</Body>
+      <Pressable
+        style={styles.progressTrack}
+        onPress={handleScrubberPress}
+        onLayout={(e) => { scrubberWidthRef.current = e.nativeEvent.layout.width }}
+      >
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0}%` },
+          ]}
+        />
+      </Pressable>
+      <Body style={styles.timeText}>{formatTime(playbackDuration)}</Body>
+      <Pressable style={styles.speedPill} onPress={cycleSpeed}>
+        <Body style={styles.speedText}>{formatSpeedLabel(playbackSpeed)}</Body>
+      </Pressable>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    backgroundColor: themeLight.bgSecondary,
-    borderRadius: 12,
+    borderTopWidth: 1,
+    borderTopColor: themeLight.borderSubtle,
+    borderBottomWidth: 1,
+    borderBottomColor: themeLight.borderSubtle,
   },
   playButton: {
     width: 36,
@@ -188,39 +193,38 @@ const styles = StyleSheet.create({
     backgroundColor: themeLight.textPrimary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
-  },
-  scrubberContainer: {
-    flex: 1,
-  },
-  scrubber: {
-    width: '100%',
-    marginBottom: 6,
-  },
-  scrubberTrack: {
-    height: 3,
-    backgroundColor: themeLight.border,
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  scrubberFill: {
-    height: '100%',
-    backgroundColor: themeLight.accent,
-    borderRadius: 2,
-  },
-  timeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
   },
   timeText: {
-    fontSize: 12,
     fontFamily: 'PlusJakartaSans_500Medium',
-    color: themeLight.textSecondary,
-  },
-  speedLabel: {
-    fontSize: 13,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 12,
     color: themeLight.textSecondary,
     marginLeft: 12,
+  },
+  progressTrack: {
+    height: 3,
+    backgroundColor: themeLight.border,
+    borderRadius: 1.5,
+    flex: 1,
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: themeLight.accent,
+    borderRadius: 1.5,
+  },
+  speedPill: {
+    backgroundColor: themeLight.bgTertiary,
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speedText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 12,
+    color: themeLight.textPrimary,
   },
 })
