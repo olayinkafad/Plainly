@@ -631,7 +631,9 @@ export default function RecordingDetail() {
 
           {/* Tooltip box */}
           <View style={[styles.tooltipBox, { top: tabsYRef.current + 52 }]}>
-            <View style={styles.tooltipArrow} />
+            <View style={styles.tooltipArrowContainer}>
+              <View style={styles.tooltipArrowShape} />
+            </View>
             <Text style={styles.tooltipText}>
               <Text style={styles.tooltipBold}>Summary</Text>
               {' shows the key points. '}
@@ -886,12 +888,14 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     zIndex: 2001,
   },
-  tooltipArrow: {
+  tooltipArrowContainer: {
     position: 'absolute',
     top: -8,
-    alignSelf: 'center',
-    left: '50%',
-    marginLeft: -8,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  tooltipArrowShape: {
     width: 0,
     height: 0,
     borderLeftWidth: 8,
