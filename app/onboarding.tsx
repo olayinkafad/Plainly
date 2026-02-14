@@ -18,6 +18,27 @@ import OnboardingUseCaseCards from '../components/OnboardingUseCaseCards'
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
+// Fixed spacing (same on all 3 screens)
+const GAP_TOP_TO_ILLUSTRATION = 16
+const GAP_ILLUSTRATION_TO_HEADING = 24
+const GAP_HEADING_TO_SUBTEXT = 8
+const GAP_SUBTEXT_TO_DOTS = 24
+const GAP_DOTS_TO_BUTTON = 16
+const GAP_BUTTON_TO_BOTTOM = 32
+
+// Illustration 45% of screen so heading/subtext/dots/button sit in same place
+const ILLUSTRATION_HEIGHT = Math.round(SCREEN_HEIGHT * 0.45)
+
+// Fixed slide content height so heading/body/dots align across all screens
+const SLIDE_CONTENT_HEIGHT =
+  GAP_TOP_TO_ILLUSTRATION +
+  ILLUSTRATION_HEIGHT +
+  GAP_ILLUSTRATION_TO_HEADING +
+  90 + // title ~2 lines
+  GAP_HEADING_TO_SUBTEXT +
+  65 + // body ~3 lines
+  GAP_SUBTEXT_TO_DOTS
+
 interface Slide {
   title: string
   body: string
@@ -93,15 +114,22 @@ export default function Onboarding() {
   const renderSlide = ({ item, index }: { item: Slide; index: number }) => (
     <View style={styles.slideContainer}>
       <View style={styles.slide}>
-        {/* 1. Illustration area – top, dominant (~2/3) */}
-        <View style={styles.illustrationArea}>
+        {/* 1. Top padding */}
+        <View style={{ height: GAP_TOP_TO_ILLUSTRATION }} />
+        {/* 2. Illustration area – 45% height, content centered */}
+        <View style={[styles.illustrationArea, { height: ILLUSTRATION_HEIGHT }]}>
           {renderIllustration(item, index)}
         </View>
-        {/* 2. Heading + subtext – below illustration, centered */}
-        <View style={styles.textSection}>
-          <Title style={styles.title}>{item.title}</Title>
-          <Body style={styles.body}>{item.body}</Body>
-        </View>
+        {/* 3. Illustration → heading */}
+        <View style={{ height: GAP_ILLUSTRATION_TO_HEADING }} />
+        {/* 4. Heading */}
+        <Title style={styles.title}>{item.title}</Title>
+        {/* 5. Heading → subtext */}
+        <View style={{ height: GAP_HEADING_TO_SUBTEXT }} />
+        {/* 6. Subtext */}
+        <Body style={styles.body}>{item.body}</Body>
+        {/* 7. Subtext → dots (same as illustration → heading) */}
+        <View style={{ height: GAP_SUBTEXT_TO_DOTS }} />
       </View>
     </View>
   )
@@ -124,6 +152,7 @@ export default function Onboarding() {
           disableIntervalMomentum
           onMomentumScrollEnd={handleMomentumScrollEnd}
           scrollEventThrottle={16}
+          style={styles.flatList}
           getItemLayout={(_, index) => ({
             length: SCREEN_WIDTH,
             offset: SCREEN_WIDTH * index,
@@ -132,7 +161,7 @@ export default function Onboarding() {
           contentContainerStyle={styles.flatListContent}
         />
 
-        {/* Pagination dots – below carousel, centered */}
+        {/* Pagination dots – pinned at bottom, centered */}
         <View style={styles.progressContainer}>
           {slides.map((_, index) => (
             <View
@@ -145,8 +174,8 @@ export default function Onboarding() {
           ))}
         </View>
 
-        {/* Get started – bottom, app CTA style */}
-        <View style={[styles.bottomZone, { paddingBottom: insets.bottom + 16 }]}>
+        {/* Dots → button: 16px; button → bottom: 32px */}
+        <View style={[styles.bottomZone, { paddingBottom: insets.bottom + GAP_BUTTON_TO_BOTTOM }]}>
           <Button
             variant="primary"
             fullWidth
@@ -171,26 +200,24 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  flatListContent: {
-    flexGrow: 1,
+  flatList: {
+    height: SLIDE_CONTENT_HEIGHT,
   },
+  flatListContent: {},
   slideContainer: {
     width: SCREEN_WIDTH,
-    flex: 1,
+    height: SLIDE_CONTENT_HEIGHT,
   },
   slide: {
-    flex: 1,
     paddingHorizontal: 20,
   },
-  /* Illustration – balanced height, content vertically centered, reduced padding */
+  /* Illustration – height set inline (45% of screen), content centered */
   illustrationArea: {
     width: '100%',
-    height: Math.round(SCREEN_HEIGHT * 0.36),
     backgroundColor: '#EEF3FF',
     borderRadius: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
-    marginBottom: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -200,29 +227,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /* Text – below illustration, centered */
-  textSection: {
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  /* Heading – Satoshi-Bold from assets, 28–30pt */
   title: {
+    fontFamily: 'Satoshi-Bold',
+    fontSize: 29,
     textAlign: 'center',
-    marginBottom: 8,
     color: '#111827',
   },
+  /* Subtext – Satoshi-Regular from assets */
   body: {
+    fontFamily: 'Satoshi-Regular',
     textAlign: 'center',
     color: '#6B7280',
   },
-  /* Pagination – below carousel */
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 16,
+    paddingTop: 0,
+    paddingBottom: GAP_DOTS_TO_BUTTON,
   },
   progressDot: {
     width: 8,
@@ -237,9 +261,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
   },
   bottomZone: {
-    paddingTop: 12,
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingTop: 0,
     width: '100%',
   },
 })

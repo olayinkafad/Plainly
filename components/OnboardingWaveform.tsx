@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react'
 import { View, StyleSheet, Animated, Easing } from 'react-native'
 import Icon from './Icon'
 
-const BAR_COUNT = 25
+const BAR_COUNT = 15
+const BAR_HEIGHT_MAX = 40
+const BAR_HEIGHT_MIN = 4
 const PRIMARY_BLUE = '#2563EB'
 
 export default function OnboardingWaveform() {
@@ -13,20 +15,18 @@ export default function OnboardingWaveform() {
 
   useEffect(() => {
     const loops = animValues.map((val, i) => {
-      const minScale = 0.15 + (i % 5) * 0.03
-      const maxScale = 0.5 + (i % 7) * 0.08
       return Animated.loop(
         Animated.sequence([
-          Animated.delay((i * 48 + (i % 3) * 20) % 350),
+          Animated.delay((i * 55 + (i % 4) * 25) % 400),
           Animated.timing(val, {
             toValue: 1,
-            duration: 280 + (i % 6) * 70,
+            duration: 320 + (i % 5) * 80,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(val, {
             toValue: 0,
-            duration: 280 + (i % 6) * 70,
+            duration: 320 + (i % 5) * 80,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
@@ -61,7 +61,7 @@ export default function OnboardingWaveform() {
 
   const pulseScale = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.55],
+    outputRange: [1, 1.5],
   })
   const pulseOpacity = pulseAnim.interpolate({
     inputRange: [0, 0.5, 1],
@@ -81,16 +81,16 @@ export default function OnboardingWaveform() {
           ]}
         />
         <View style={styles.micCircle}>
-          <Icon name="microphone" size={28} color="#FFFFFF" />
+          <Icon name="microphone" size={32} color="#FFFFFF" />
         </View>
       </View>
       <View style={styles.barsRow}>
         {animValues.map((val, i) => {
-          const minScale = 0.15 + (i % 5) * 0.03
-          const maxScale = Math.min(0.95, 0.5 + (i % 7) * 0.08)
+          const minScale = BAR_HEIGHT_MIN / BAR_HEIGHT_MAX
+          const maxScale = 0.3 + (i % 6) * 0.12 + (i % 4) * 0.08
           const scaleY = val.interpolate({
             inputRange: [0, 1],
-            outputRange: [minScale, maxScale],
+            outputRange: [minScale, Math.min(1, maxScale)],
           })
           return (
             <View key={i} style={styles.barOuter}>
@@ -119,43 +119,44 @@ const styles = StyleSheet.create({
   },
   micWrapper: {
     position: 'relative',
-    marginBottom: 20,
+    marginBottom: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pulseRing: {
     position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: PRIMARY_BLUE,
   },
   micCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: PRIMARY_BLUE,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
   barsRow: {
-    width: '80%',
+    width: '85%',
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
-    gap: 4,
-    height: 40,
+    gap: 5,
+    height: BAR_HEIGHT_MAX,
   },
   barOuter: {
-    height: 32,
+    height: BAR_HEIGHT_MAX,
     flex: 1,
     justifyContent: 'flex-end',
-    minWidth: 3,
+    minWidth: 5,
+    maxWidth: 6,
   },
   bar: {
     width: '100%',
-    height: 32,
+    height: BAR_HEIGHT_MAX,
     borderRadius: 3,
     backgroundColor: PRIMARY_BLUE,
   },

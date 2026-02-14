@@ -50,8 +50,9 @@ const cards: {
 
 export default function OnboardingUseCaseCards() {
   return (
-    <View style={styles.grid}>
-      {cards.map((card) => (
+    <View style={styles.wrapper}>
+      <View style={styles.grid}>
+        {cards.map((card) => (
         <View key={card.key} style={styles.card}>
           <View
             style={[
@@ -61,7 +62,7 @@ export default function OnboardingUseCaseCards() {
           >
             <Icon
               name={card.icon as 'users' | 'sparkle' | 'plant' | 'check'}
-              size={22}
+              size={20}
               color={CARD_ICON_COLOR[card.key]}
             />
           </View>
@@ -69,26 +70,34 @@ export default function OnboardingUseCaseCards() {
           <Body style={styles.description}>{card.description}</Body>
         </View>
       ))}
+      </View>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    width: '100%',
+    padding: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
     width: '100%',
-    flex: 1,
+    maxWidth: 320,
     justifyContent: 'center',
     alignItems: 'center',
     alignContent: 'center',
   },
   card: {
-    width: '48%',
+    width: '47%',
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
-    padding: 16,
+    padding: 12,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -96,21 +105,21 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   description: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#6B7280',
-    lineHeight: 19,
+    lineHeight: 17,
   },
 })

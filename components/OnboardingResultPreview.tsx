@@ -5,8 +5,7 @@ import { Title, Body } from './typography'
 
 const PRIMARY_BLUE = '#2563EB'
 const TAB_ACTIVE_BG = '#2563EB'
-const TAB_INACTIVE_BG = '#F9FAFB'
-const TAB_INACTIVE_BORDER = '#E5E7EB'
+const TAB_INACTIVE_BG = '#FFFFFF'
 const CARD_BG = '#FFFFFF'
 const HIGHLIGHT_BG = 'rgba(37, 99, 235, 0.22)'
 const FILLER_COLOR = '#9CA3AF'
@@ -14,32 +13,11 @@ const FILLER_COLOR = '#9CA3AF'
 const SUMMARY_DURATION_MS = 5000
 const TRANSCRIPT_DURATION_MS = 6000
 const CROSSFADE_DURATION_MS = 500
-const MS_PER_WORD = 300
 
 const TRANSCRIPT_TEXT =
-  "Okay so I'm trying to figure out what to do this weekend. I think Saturday I just want to stay in, maybe cook something, I don't know, watch a film or something. And then Sunday I was thinking we could try that new brunch place, the one on 5th. Oh and I need to call my mum at some point..."
+  "Okay so I'm trying to figure out what to do this weekend. I think Saturday I just want to stay in, maybe cook something. And then Sunday we could try that new brunch place on 5th. Oh and I need to call my mum..."
 
-const FILLER_WORDS = new Set([
-  'so',
-  "i'm",
-  'i',
-  'just',
-  'maybe',
-  "don't",
-  'know',
-  'or',
-  'something',
-  'and',
-  'then',
-  'oh',
-  'the',
-  'that',
-  'we',
-  'could',
-  'at',
-  'some',
-  'point',
-])
+const FILLER_WORDS = new Set(['so', 'maybe', 'oh', 'and'])
 
 interface OnboardingResultPreviewProps {
   isFocused: boolean
@@ -107,10 +85,9 @@ export default function OnboardingResultPreview({ isFocused }: OnboardingResultP
         }),
       ]).start()
       transcriptProgress.setValue(0)
-      const highlightDurationMs = wordCount * MS_PER_WORD
       Animated.timing(transcriptProgress, {
         toValue: 1,
-        duration: highlightDurationMs,
+        duration: TRANSCRIPT_DURATION_MS,
         easing: Easing.linear,
         useNativeDriver: false,
       }).start()
@@ -189,25 +166,39 @@ export default function OnboardingResultPreview({ isFocused }: OnboardingResultP
 
         <Animated.View
           style={[
-            styles.card,
             styles.transcriptCard,
+            styles.transcriptCardShadow,
             { opacity: transcriptOpacity },
           ]}
           pointerEvents={viewMode === 'transcript' ? 'auto' : 'none'}
         >
-          {/* Mini audio player */}
-          <View style={styles.miniPlayer}>
-            <View style={styles.miniPlayBtn}>
-              <Icon name="play" size={14} color="#FFFFFF" />
+          {/* Audio strip – same style as result screen */}
+          <View style={styles.audioStrip}>
+            <View style={styles.audioPlayButton}>
+              <Icon name="play" size={20} color="#FFFFFF" />
             </View>
-            <View style={styles.miniScrubber}>
-              <View style={styles.miniScrubberTrack}>
-                <View style={[styles.miniScrubberFill, { width: '35%' }]} />
+            <View style={styles.audioScrubberContainer}>
+              <View style={styles.audioTimeRow}>
+                <Text style={styles.audioTimeText}>0:00</Text>
+                <Text style={styles.audioTimeText}>0:45</Text>
               </View>
-              <Text style={styles.miniTime}>0:00 / 0:45</Text>
+              <View style={styles.audioScrubberTrack}>
+                <Animated.View
+                  style={[
+                    styles.audioScrubberFill,
+                    {
+                      width: transcriptProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
             </View>
+            <Text style={styles.audioSpeedLabel}>1x</Text>
           </View>
-          {/* Transcript with trailing highlight */}
+          {/* Transcript text – 3–4 lines, normal spacing, word highlight in sync */}
           <View style={styles.transcriptBody}>
             {words.map((word, i) => (
               <TranscriptWord
@@ -269,6 +260,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flex: 1,
     alignSelf: 'center',
+    paddingTop: 16,
   },
   tabs: {
     flexDirection: 'row',
@@ -281,14 +273,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     minHeight: 32,
     justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   tabActive: {
     backgroundColor: TAB_ACTIVE_BG,
   },
   tabInactive: {
     backgroundColor: TAB_INACTIVE_BG,
-    borderWidth: 1,
-    borderColor: TAB_INACTIVE_BORDER,
   },
   tabText: {
     fontSize: 13,
@@ -310,13 +305,32 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     backgroundColor: CARD_BG,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 14,
-    paddingBottom: 16,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   summaryCard: {},
+  transcriptCard: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    backgroundColor: CARD_BG,
+    borderRadius: 14,
+    padding: 16,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  transcriptCardShadow: {},
   summaryTitle: {
     fontSize: 16,
     color: '#111827',
@@ -325,12 +339,12 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: '#E5E7EB',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   summaryPara: {
     fontSize: 13,
     color: '#111827',
-    lineHeight: 20,
+    lineHeight: Math.round(13 * 1.6),
     marginBottom: 12,
   },
   bulletSection: {
@@ -353,40 +367,53 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: '#111827',
-    lineHeight: 18,
+    lineHeight: Math.round(12 * 1.6),
   },
-  transcriptCard: {},
-  miniPlayer: {
+  audioStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  miniPlayBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  audioPlayButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: PRIMARY_BLUE,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
+    marginRight: 12,
   },
-  miniScrubber: {
+  audioScrubberContainer: {
     flex: 1,
+    marginRight: 12,
   },
-  miniScrubberTrack: {
-    height: 3,
+  audioTimeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  audioTimeText: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontFamily: 'Satoshi-Regular',
+  },
+  audioScrubberTrack: {
+    height: 4,
     backgroundColor: '#E5E7EB',
-    borderRadius: 1.5,
+    borderRadius: 2,
     overflow: 'hidden',
-    marginBottom: 4,
   },
-  miniScrubberFill: {
+  audioScrubberFill: {
     height: '100%',
     backgroundColor: PRIMARY_BLUE,
-    borderRadius: 1.5,
+    borderRadius: 2,
   },
-  miniTime: {
-    fontSize: 10,
+  audioSpeedLabel: {
+    fontSize: 12,
     color: '#6B7280',
     fontFamily: 'Satoshi-Regular',
   },
@@ -394,15 +421,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'flex-start',
+    padding: 16,
+    paddingTop: 14,
   },
   wordWrap: {
     borderRadius: 2,
-    paddingHorizontal: 1,
   },
   transcriptWord: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#111827',
     fontFamily: 'Satoshi-Regular',
+    lineHeight: Math.round(14 * 1.7),
   },
   transcriptWordFiller: {
     color: FILLER_COLOR,
