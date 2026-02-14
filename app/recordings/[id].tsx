@@ -43,10 +43,12 @@ export default function RecordingDetail() {
   const [showSavedToast, setShowSavedToast] = useState(false)
   const savedToastAnim = useRef(new Animated.Value(0)).current
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tooltipDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Tooltip state
   const [showTooltip, setShowTooltip] = useState(false)
   const tooltipAnim = useRef(new Animated.Value(0)).current
+  const tooltipSlideAnim = useRef(new Animated.Value(10)).current
   const tabsYRef = useRef(0)
 
   // Content crossfade
@@ -57,6 +59,7 @@ export default function RecordingDetail() {
     hasAutoTitledRef.current = false
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      if (tooltipDelayRef.current) clearTimeout(tooltipDelayRef.current)
     }
   }, [id])
 
@@ -64,6 +67,7 @@ export default function RecordingDetail() {
   useEffect(() => {
     if (!recording) return
 
+    // Step 1: Fade in toast
     setShowSavedToast(true)
     Animated.timing(savedToastAnim, {
       toValue: 1,
@@ -71,6 +75,7 @@ export default function RecordingDetail() {
       useNativeDriver: true,
     }).start()
 
+    // Step 2: After 2s, fade out toast
     toastTimerRef.current = setTimeout(() => {
       Animated.timing(savedToastAnim, {
         toValue: 0,
@@ -78,12 +83,17 @@ export default function RecordingDetail() {
         useNativeDriver: true,
       }).start(() => {
         setShowSavedToast(false)
-        checkAndShowTooltip()
+
+        // Step 3: Wait 500ms after toast is fully gone
+        tooltipDelayRef.current = setTimeout(() => {
+          checkAndShowTooltip()
+        }, 500)
       })
     }, 2000)
 
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      if (tooltipDelayRef.current) clearTimeout(tooltipDelayRef.current)
     }
   }, [recording?.id])
 
@@ -92,11 +102,22 @@ export default function RecordingDetail() {
       const hasSeen = await AsyncStorage.getItem(TOOLTIP_STORAGE_KEY)
       if (!hasSeen) {
         setShowTooltip(true)
-        Animated.timing(tooltipAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start()
+        tooltipSlideAnim.setValue(10)
+        tooltipAnim.setValue(0)
+
+        // Fade in overlay + slide up tooltip box in parallel
+        Animated.parallel([
+          Animated.timing(tooltipAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(tooltipSlideAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start()
       }
     } catch {
       // Fail silently
@@ -109,14 +130,21 @@ export default function RecordingDetail() {
     } catch {
       // Fail silently
     }
-    Animated.timing(tooltipAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(tooltipAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tooltipSlideAnim, {
+        toValue: 10,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
       setShowTooltip(false)
     })
-  }, [tooltipAnim])
+  }, [tooltipAnim, tooltipSlideAnim])
 
   const loadRecording = async () => {
     if (!id) return
@@ -630,7 +658,7 @@ export default function RecordingDetail() {
           </View>
 
           {/* Tooltip box */}
-          <View style={[styles.tooltipBox, { top: tabsYRef.current + 52 }]}>
+          <Animated.View style={[styles.tooltipBox, { top: tabsYRef.current + 52, transform: [{ translateY: tooltipSlideAnim }] }]}>
             <View style={styles.tooltipArrowContainer}>
               <View style={styles.tooltipArrowShape} />
             </View>
@@ -643,7 +671,7 @@ export default function RecordingDetail() {
             <Pressable style={styles.tooltipButton} onPress={dismissTooltip}>
               <Body style={styles.tooltipButtonText}>Got it</Body>
             </Pressable>
-          </View>
+          </Animated.View>
         </Animated.View>
       )}
 
