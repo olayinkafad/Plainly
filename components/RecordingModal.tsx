@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, usePathname } from 'expo-router'
 import Icon from './Icon'
 import { Title, Body } from './typography'
-import Button from './Button'
 import { Recording, recordingsStore } from '../store/recordings'
 import { themeLight } from '../constants/theme'
 import { processRecording, generateRecordingTitle } from '../lib/api'
@@ -53,7 +52,7 @@ export default function RecordingModal({
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
   const [hasRecording, setHasRecording] = useState(false)
-  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+  const [showCloseSheet, setShowCloseSheet] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const slideAnim = useRef(new Animated.Value(0)).current
   const hasStartedRef = useRef(false)
@@ -164,7 +163,7 @@ export default function RecordingModal({
       resetRecording()
       resetProcessingState()
       hasStartedRef.current = false
-      setShowDiscardConfirm(false)
+      setShowCloseSheet(false)
     }
 
     return () => {
@@ -687,19 +686,24 @@ export default function RecordingModal({
     }
   }
 
-  // ── Discard ──
+  // ── Close actions ──
 
   const handleClose = () => {
     if (phase === 'processing') return // Cannot cancel during processing
     if (hasRecording && (recordingState === 'recording' || recordingState === 'paused')) {
-      setShowDiscardConfirm(true)
+      setShowCloseSheet(true)
     } else {
       onClose()
     }
   }
 
-  const handleConfirmDiscard = async () => {
-    setShowDiscardConfirm(false)
+  const handleSaveAndFinish = async () => {
+    setShowCloseSheet(false)
+    await saveAndCloseRecording()
+  }
+
+  const handleDiscardRecording = async () => {
+    setShowCloseSheet(false)
     await resetRecording()
     onClose()
     setTimeout(async () => {
@@ -903,30 +907,33 @@ export default function RecordingModal({
           </Animated.View>
         </Animated.View>
 
-        {/* ── Discard Confirmation Overlay ── */}
-        {showDiscardConfirm && (
-          <View style={styles.discardOverlay}>
-            <Pressable style={styles.discardDismiss} onPress={() => setShowDiscardConfirm(false)} />
-            <View style={[styles.discardCard, { paddingBottom: insets.bottom + 28 }]}>
-              <Title style={styles.discardTitle}>Discard this recording?</Title>
-              <Body style={styles.discardSubtext}>Your recording will be lost.</Body>
-              <View style={styles.discardButtonRow}>
-                <View style={styles.discardBtnContainer}>
-                  <Button variant="secondary" fullWidth onPress={() => setShowDiscardConfirm(false)}>
-                    Cancel
-                  </Button>
-                </View>
-                <View style={styles.discardBtnContainer}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.discardConfirmBtn,
-                      pressed && { opacity: 0.8 },
-                    ]}
-                    onPress={handleConfirmDiscard}
-                  >
-                    <Body style={styles.discardConfirmText}>Discard</Body>
-                  </Pressable>
-                </View>
+        {/* ── Close Action Sheet ── */}
+        {showCloseSheet && (
+          <View style={styles.closeSheetOverlay}>
+            <Pressable style={styles.closeSheetDismiss} onPress={() => setShowCloseSheet(false)} />
+            <View style={[styles.closeSheetContainer, { paddingBottom: Math.max(insets.bottom, 34) }]}>
+              <View style={styles.closeSheetCard}>
+                <Pressable
+                  style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
+                  onPress={handleSaveAndFinish}
+                >
+                  <Body style={styles.closeSheetSaveText}>Save and finish</Body>
+                </Pressable>
+                <View style={styles.closeSheetDivider} />
+                <Pressable
+                  style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
+                  onPress={handleDiscardRecording}
+                >
+                  <Body style={styles.closeSheetDiscardText}>Discard recording</Body>
+                </Pressable>
+              </View>
+              <View style={styles.closeSheetCancelCard}>
+                <Pressable
+                  style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
+                  onPress={() => setShowCloseSheet(false)}
+                >
+                  <Body style={styles.closeSheetCancelText}>Cancel</Body>
+                </Pressable>
               </View>
             </View>
           </View>
@@ -1148,54 +1155,52 @@ const styles = StyleSheet.create({
   },
 
   // ── Discard Confirmation ──
-  discardOverlay: {
+  closeSheetOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
-  discardDismiss: {
+  closeSheetDismiss: {
     flex: 1,
   },
-  discardCard: {
+  closeSheetContainer: {
+    paddingHorizontal: 12,
+  },
+  closeSheetCard: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  closeSheetCancelCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  closeSheetOption: {
+    paddingVertical: 17,
     alignItems: 'center',
   },
-  discardTitle: {
-    fontSize: 20,
-    color: themeLight.textPrimary,
-    textAlign: 'center',
-    marginBottom: 8,
+  closeSheetDivider: {
+    height: 1,
+    backgroundColor: themeLight.borderSubtle,
   },
-  discardSubtext: {
-    fontSize: 15,
-    color: themeLight.textSecondary,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  discardButtonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  discardBtnContainer: {
-    flex: 1,
-  },
-  discardConfirmBtn: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 9999,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: themeLight.error,
-  },
-  discardConfirmText: {
+  closeSheetSaveText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 16,
-    color: '#FFFFFF',
+    color: themeLight.accent,
+    textAlign: 'center',
+  },
+  closeSheetDiscardText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: '#C43E3E',
+    textAlign: 'center',
+  },
+  closeSheetCancelText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: themeLight.textSecondary,
+    textAlign: 'center',
   },
 })
