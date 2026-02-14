@@ -24,9 +24,9 @@ interface OnboardingResultPreviewProps {
 }
 
 export default function OnboardingResultPreview({ isFocused }: OnboardingResultPreviewProps) {
-  const [viewMode, setViewMode] = useState<'summary' | 'transcript'>('summary')
-  const summaryOpacity = useRef(new Animated.Value(1)).current
-  const transcriptOpacity = useRef(new Animated.Value(0)).current
+  const [viewMode, setViewMode] = useState<'summary' | 'transcript'>('transcript')
+  const summaryOpacity = useRef(new Animated.Value(0)).current
+  const transcriptOpacity = useRef(new Animated.Value(1)).current
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const transcriptProgress = useRef(new Animated.Value(0)).current
 
@@ -46,29 +46,11 @@ export default function OnboardingResultPreview({ isFocused }: OnboardingResultP
       return
     }
 
-    // When slide is focused, start from summary and begin cycle
-    setViewMode('summary')
-    summaryOpacity.setValue(1)
-    transcriptOpacity.setValue(0)
+    // When slide is focused, start from transcript and begin cycle
+    setViewMode('transcript')
+    summaryOpacity.setValue(0)
+    transcriptOpacity.setValue(1)
     transcriptProgress.setValue(0)
-
-    const showSummary = () => {
-      setViewMode('summary')
-      Animated.parallel([
-        Animated.timing(summaryOpacity, {
-          toValue: 1,
-          duration: CROSSFADE_DURATION_MS,
-          useNativeDriver: true,
-        }),
-        Animated.timing(transcriptOpacity, {
-          toValue: 0,
-          duration: CROSSFADE_DURATION_MS,
-          useNativeDriver: true,
-        }),
-      ]).start()
-      transcriptProgress.setValue(0)
-      timerRef.current = setTimeout(showTranscript, SUMMARY_DURATION_MS)
-    }
 
     const showTranscript = () => {
       setViewMode('transcript')
@@ -94,7 +76,25 @@ export default function OnboardingResultPreview({ isFocused }: OnboardingResultP
       timerRef.current = setTimeout(showSummary, TRANSCRIPT_DURATION_MS)
     }
 
-    timerRef.current = setTimeout(showTranscript, SUMMARY_DURATION_MS)
+    const showSummary = () => {
+      setViewMode('summary')
+      Animated.parallel([
+        Animated.timing(summaryOpacity, {
+          toValue: 1,
+          duration: CROSSFADE_DURATION_MS,
+          useNativeDriver: true,
+        }),
+        Animated.timing(transcriptOpacity, {
+          toValue: 0,
+          duration: CROSSFADE_DURATION_MS,
+          useNativeDriver: true,
+        }),
+      ]).start()
+      transcriptProgress.setValue(0)
+      timerRef.current = setTimeout(showTranscript, SUMMARY_DURATION_MS)
+    }
+
+    timerRef.current = setTimeout(showTranscript, 0)
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
@@ -102,23 +102,8 @@ export default function OnboardingResultPreview({ isFocused }: OnboardingResultP
 
   return (
     <View style={styles.container}>
-      {/* Tabs */}
+      {/* Tabs – Transcript first, then Summary */}
       <View style={styles.tabs}>
-        <View
-          style={[
-            styles.tab,
-            viewMode === 'summary' ? styles.tabActive : styles.tabInactive,
-          ]}
-        >
-          <Body
-            style={[
-              styles.tabText,
-              viewMode === 'summary' && styles.tabTextActive,
-            ]}
-          >
-            Summary
-          </Body>
-        </View>
         <View
           style={[
             styles.tab,
@@ -132,6 +117,21 @@ export default function OnboardingResultPreview({ isFocused }: OnboardingResultP
             ]}
           >
             Transcript
+          </Body>
+        </View>
+        <View
+          style={[
+            styles.tab,
+            viewMode === 'summary' ? styles.tabActive : styles.tabInactive,
+          ]}
+        >
+          <Body
+            style={[
+              styles.tabText,
+              viewMode === 'summary' && styles.tabTextActive,
+            ]}
+          >
+            Summary
           </Body>
         </View>
       </View>
