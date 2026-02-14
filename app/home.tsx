@@ -179,7 +179,12 @@ export default function Home() {
       // Check fresh start flag
       if (allRecordings.length === 0) {
         const flag = await AsyncStorage.getItem('@plainly_has_deleted_all')
-        setIsFreshStart(flag === 'true')
+        if (flag === 'true') {
+          setIsFreshStart(true)
+          await AsyncStorage.removeItem('@plainly_has_deleted_all')
+        } else {
+          setIsFreshStart(false)
+        }
       } else {
         setIsFreshStart(false)
       }
@@ -709,10 +714,7 @@ export default function Home() {
         /* ── Empty State ── */
         <View style={styles.contentWrapper}>
           <View style={styles.contentArea}>
-            {isFreshStart && (
-              <Title style={styles.freshStartText}>Fresh start.</Title>
-            )}
-            <Title style={[styles.emptyTitle, isFreshStart && { marginTop: 4 }]}>What's on your mind?</Title>
+            <Title style={styles.emptyTitle}>{isFreshStart ? 'Fresh start. What\u2019s on your mind?' : 'What\u2019s on your mind?'}</Title>
             <Body style={styles.emptySubtext}>
               Your recordings will show up here.
             </Body>

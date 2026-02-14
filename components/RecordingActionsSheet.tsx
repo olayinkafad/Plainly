@@ -4,7 +4,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
 import { themeLight } from '../constants/theme'
 import { Title, Body } from './typography'
-import Button from './Button'
 
 interface RecordingActionsSheetProps {
   isOpen: boolean
@@ -113,29 +112,17 @@ export default function RecordingActionsSheet({
             ) : (
               /* Delete Confirmation */
               <View style={styles.confirmContainer}>
-                <Title style={styles.confirmTitle}>Delete this recording?</Title>
-                <Body style={styles.confirmText}>
-                  This will remove the audio and all generated formats.
-                </Body>
-                <View style={styles.confirmActions}>
-                  <View style={styles.confirmButtonContainer}>
-                    <Button variant="secondary" fullWidth onPress={handleClose}>
-                      Cancel
-                    </Button>
-                  </View>
-                  <View style={styles.confirmSpacing} />
-                  <View style={styles.confirmButtonContainer}>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.deleteButton,
-                        pressed && styles.deleteButtonPressed,
-                      ]}
-                      onPress={handleDelete}
-                    >
-                      <Body style={styles.deleteButtonText}>Delete</Body>
-                    </Pressable>
-                  </View>
-                </View>
+                <Body style={styles.confirmWarning}>This can't be undone.</Body>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    pressed && styles.deleteButtonPressed,
+                  ]}
+                  onPress={handleDelete}
+                >
+                  <Icon name="trash" size={16} color="#FFFFFF" />
+                  <Body style={styles.deleteButtonText}>Delete recording</Body>
+                </Pressable>
               </View>
             )}
           </Pressable>
@@ -169,7 +156,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     flex: 1,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'PlusJakartaSans_700Bold',
     fontSize: 16,
     color: themeLight.textPrimary,
   },
@@ -202,33 +189,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   confirmTitle: {
-    marginBottom: 12, // --space-3
     color: themeLight.textPrimary,
     textAlign: 'center',
     fontSize: 18,
   },
-  confirmText: {
-    marginBottom: 24, // --space-6
+  confirmWarning: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 14,
     color: themeLight.textSecondary,
     textAlign: 'center',
-  },
-  confirmActions: {
-    flexDirection: 'row',
-    gap: 12, // --space-3
-  },
-  confirmSpacing: {
-    width: 12, // --space-3
-  },
-  confirmButtonContainer: {
-    flex: 1,
+    marginTop: 4,
+    marginBottom: 20,
   },
   deleteButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 9999,
-    minHeight: 44,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 26,
     backgroundColor: themeLight.error,
   },
   deleteButtonPressed: {
