@@ -3,6 +3,7 @@ import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, ScrollView, E
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
+import LottieView from 'lottie-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, usePathname } from 'expo-router'
 import Icon from './Icon'
@@ -21,8 +22,6 @@ interface RecordingModalProps {
 
 type RecordingState = 'idle' | 'recording' | 'paused'
 
-const WAVEFORM_BAR_COUNT = 25
-
 const PROCESSING_STEPS = [
   'Sending your recording',
   'Cleaning up your words',
@@ -31,13 +30,6 @@ const PROCESSING_STEPS = [
 ]
 
 const STEP_MIN_TIMES = [1500, 2000, 2000, 1000]
-
-// Pre-computed static bar heights for visual variety (taller in center, shorter at edges)
-const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
-  const center = WAVEFORM_BAR_COUNT / 2
-  const distance = Math.abs(i - center) / center
-  return 16 + 28 * (1 - distance * 0.7) + Math.random() * 8
-})
 
 const MAX_RECORDING_DURATION = 1800 // 30 minutes in seconds
 const MAX_DURATION_WARNING_THRESHOLD = 0.9 // Show warning at 90%
@@ -78,9 +70,8 @@ export default function RecordingModal({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const slideAnim = useRef(new Animated.Value(0)).current
   const hasStartedRef = useRef(false)
-  const waveformAnimations = useRef(
-    Array.from({ length: WAVEFORM_BAR_COUNT }, () => new Animated.Value(0.3))
-  ).current
+  const lottieRef = useRef<LottieView>(null)
+  const waveformOpacity = useRef(new Animated.Value(1)).current
 
   // ── Processing phase state ──
   const [phase, setPhase] = useState<'recording' | 'processing'>('recording')
@@ -313,7 +304,7 @@ export default function RecordingModal({
       recorder.pause()
       setRecordingState('paused')
       stopTimer()
-      stopWaveformAnimation()
+      pauseWaveformAnimation()
     } catch (error) {
       console.error('Failed to pause recording:', error)
     }
@@ -397,7 +388,8 @@ export default function RecordingModal({
       micReconnectTimerRef.current = null
     }
     stopTimer()
-    stopWaveformAnimation()
+    lottieRef.current?.reset()
+    waveformOpacity.setValue(1)
     hasStartedRef.current = false
     try {
       await setAudioModeAsync({
@@ -417,7 +409,7 @@ export default function RecordingModal({
     setMicInterrupted(true)
     setRecordingState('paused')
     stopTimer()
-    stopWaveformAnimation()
+    pauseWaveformAnimation()
 
     // Start 5-second reconnection timer
     if (micReconnectTimerRef.current) {
@@ -513,32 +505,36 @@ export default function RecordingModal({
     return `${minutes}:${secs.toString().padStart(2, '0')}`
   }
 
-  // ── Waveform (25 bars, opacity-animated) ──
+  // ── Waveform (Lottie) ──
+
+  // Drive Lottie playback from recordingState so it plays after mount
+  useEffect(() => {
+    if (recordingState === 'recording' && phase === 'recording') {
+      waveformOpacity.setValue(1)
+      // Small delay to ensure LottieView is mounted after conditional render
+      const timer = setTimeout(() => lottieRef.current?.play(), 50)
+      return () => clearTimeout(timer)
+    } else if (recordingState === 'paused') {
+      lottieRef.current?.pause()
+    }
+  }, [recordingState, phase])
 
   const startWaveformAnimation = () => {
-    const animations = waveformAnimations.map((anim) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, {
-            toValue: 0.3 + Math.random() * 0.7,
-            duration: 200 + Math.random() * 300,
-            useNativeDriver: true,
-          }),
-          Animated.timing(anim, {
-            toValue: 0.3 + Math.random() * 0.7,
-            duration: 200 + Math.random() * 300,
-            useNativeDriver: true,
-          }),
-        ])
-      )
-    })
-    Animated.parallel(animations).start()
+    waveformOpacity.setValue(1)
+    lottieRef.current?.play()
+  }
+
+  const pauseWaveformAnimation = () => {
+    lottieRef.current?.pause()
   }
 
   const stopWaveformAnimation = () => {
-    waveformAnimations.forEach((anim) => {
-      anim.stopAnimation()
-      anim.setValue(0.3)
+    Animated.timing(waveformOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      lottieRef.current?.pause()
     })
   }
 
@@ -1100,20 +1096,16 @@ export default function RecordingModal({
 
               {/* Waveform */}
               {(recordingState === 'recording' || recordingState === 'paused') && (
-                <View style={styles.waveformContainer}>
-                  {waveformAnimations.map((anim, index) => (
-                    <Animated.View
-                      key={index}
-                      style={[
-                        styles.waveformBar,
-                        {
-                          height: BAR_HEIGHTS[index],
-                          opacity: anim,
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
+                <Animated.View style={[styles.waveformContainer, { opacity: waveformOpacity }]}>
+                  <LottieView
+                    ref={lottieRef}
+                    source={require('../assets/audio-wave.json')}
+                    style={styles.lottieWaveform}
+                    autoPlay={false}
+                    loop
+                    speed={1}
+                  />
+                </Animated.View>
               )}
 
               {/* Buttons */}
@@ -1535,18 +1527,15 @@ const styles = StyleSheet.create({
 
   // ── Waveform ──
   waveformContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     height: 48,
     marginTop: 32,
     marginBottom: 32,
   },
-  waveformBar: {
-    width: 3,
-    backgroundColor: themeLight.accent,
-    borderRadius: 2,
-    marginHorizontal: 1.75,
+  lottieWaveform: {
+    width: 260,
+    height: 48,
   },
 
   // ── Buttons ──
