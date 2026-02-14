@@ -22,8 +22,8 @@ import { themeLight } from '../../constants/theme'
 const TOOLTIP_STORAGE_KEY = '@plainly_tooltip_result_tabs_seen'
 
 const formatOptions: { key: OutputType; title: string }[] = [
-  { key: 'summary', title: 'Summary' },
   { key: 'transcript', title: 'Transcript' },
+  { key: 'summary', title: 'Summary' },
 ]
 
 export default function RecordingDetail() {
@@ -157,7 +157,7 @@ export default function RecordingDetail() {
         if (lastViewed) {
           setActiveFormat(lastViewed)
         } else {
-          setActiveFormat('summary')
+          setActiveFormat('transcript')
         }
 
         // Auto-generate title if needed
@@ -224,9 +224,9 @@ export default function RecordingDetail() {
       }
     }
     // Always show both tabs even if one has no data yet
-    if (available.length === 0) return ['summary', 'transcript']
-    if (!available.includes('summary')) available.unshift('summary')
-    if (!available.includes('transcript')) available.push('transcript')
+    if (available.length === 0) return ['transcript', 'summary']
+    if (!available.includes('transcript')) available.unshift('transcript')
+    if (!available.includes('summary')) available.push('summary')
     return available
   }
 
@@ -663,10 +663,10 @@ export default function RecordingDetail() {
               <View style={styles.tooltipArrowShape} />
             </View>
             <Text style={styles.tooltipText}>
-              <Text style={styles.tooltipBold}>Summary</Text>
-              {' shows the key points. '}
               <Text style={styles.tooltipBold}>Transcript</Text>
-              {' has the full context of what you said.'}
+              {' has the full context of what you said. '}
+              <Text style={styles.tooltipBold}>Summary</Text>
+              {' shows the key points.'}
             </Text>
             <Pressable style={styles.tooltipButton} onPress={dismissTooltip}>
               <Body style={styles.tooltipButtonText}>Got it</Body>
