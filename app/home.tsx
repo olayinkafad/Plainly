@@ -760,13 +760,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: -8,
+    marginBottom: -8,
     marginRight: -8,
   },
   cardMeta: {
     fontFamily: 'PlusJakartaSans_400Regular',
     fontSize: 13,
     color: themeLight.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
   },
   replayButton: {
     marginTop: 12,
