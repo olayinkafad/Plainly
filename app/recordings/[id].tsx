@@ -40,6 +40,11 @@ export default function RecordingDetail() {
   const [showCopiedToast, setShowCopiedToast] = useState(false)
   const copiedToastAnim = useRef(new Animated.Value(0)).current
   const copiedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Renamed toast state
+  const [showRenamedToast, setShowRenamedToast] = useState(false)
+  const renamedToastAnim = useRef(new Animated.Value(0)).current
+  const renamedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasAutoTitledRef = useRef(false)
   const audioPlayerRef = useRef<AudioPlayerHandle>(null)
 
@@ -65,6 +70,7 @@ export default function RecordingDetail() {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       if (tooltipDelayRef.current) clearTimeout(tooltipDelayRef.current)
       if (copiedToastTimerRef.current) clearTimeout(copiedToastTimerRef.current)
+      if (renamedToastTimerRef.current) clearTimeout(renamedToastTimerRef.current)
     }
   }, [id])
 
@@ -250,11 +256,33 @@ export default function RecordingDetail() {
     }, 50)
   }
 
+  const showRenamedFeedback = () => {
+    if (renamedToastTimerRef.current) clearTimeout(renamedToastTimerRef.current)
+    setShowRenamedToast(true)
+    renamedToastAnim.setValue(0)
+    Animated.timing(renamedToastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+
+    renamedToastTimerRef.current = setTimeout(() => {
+      Animated.timing(renamedToastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowRenamedToast(false)
+      })
+    }, 1500)
+  }
+
   const handleSaveRename = async (newTitle: string) => {
     if (!recording) return
     try {
       await recordingsStore.update(recording.id, { title: newTitle })
       await loadRecording()
+      showRenamedFeedback()
     } catch (error) {
       console.error('Failed to rename recording:', error)
       Alert.alert('Error', 'Failed to rename recording')
@@ -795,6 +823,30 @@ export default function RecordingDetail() {
           <Icon name="check" size={16} color="#FFFFFF" />
         </Animated.View>
       )}
+
+      {/* Renamed Toast */}
+      {showRenamedToast && (
+        <Animated.View
+          style={[
+            styles.renamedToast,
+            {
+              opacity: renamedToastAnim,
+              transform: [
+                {
+                  translateY: renamedToastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Body style={styles.renamedToastText}>Name saved</Body>
+          <Icon name="check" size={16} color="#FFFFFF" />
+        </Animated.View>
+      )}
     </SafeAreaView>
   )
 }
@@ -1116,6 +1168,31 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   copiedToastText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFFFFF',
+  },
+
+  // Renamed toast
+  renamedToast: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeLight.success,
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    gap: 8,
+    zIndex: 4000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  renamedToastText: {
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_600SemiBold',
     color: '#FFFFFF',

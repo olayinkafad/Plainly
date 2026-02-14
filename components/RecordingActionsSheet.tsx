@@ -51,8 +51,9 @@ export default function RecordingActionsSheet({
 
   const handleDelete = () => {
     if (showDeleteConfirm) {
-      onDelete()
       setShowDeleteConfirm(false)
+      onClose()
+      onDelete()
     } else {
       setShowDeleteConfirm(true)
     }
