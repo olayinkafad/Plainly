@@ -116,7 +116,7 @@ export default function Onboarding() {
       <View style={styles.slide}>
         {/* 1. Top padding */}
         <View style={{ height: GAP_TOP_TO_ILLUSTRATION }} />
-        {/* 2. Illustration area – 45% height, content centered */}
+        {/* 2. Illustration area – 45% height, single background */}
         <View style={[styles.illustrationArea, { height: ILLUSTRATION_HEIGHT }]}>
           {renderIllustration(item, index)}
         </View>
@@ -211,15 +211,16 @@ const styles = StyleSheet.create({
   slide: {
     paddingHorizontal: 20,
   },
-  /* Illustration – height set inline (45% of screen), content centered */
+  /* Illustration – single background (#EEF3FF → #E4EDFF), no nested cards */
   illustrationArea: {
     width: '100%',
-    backgroundColor: '#EEF3FF',
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#E8EEFE',
   },
   illustrationWrapper: {
     width: '100%',
