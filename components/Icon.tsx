@@ -47,6 +47,9 @@ const lightbulbIcon = require('../assets/icons/lightbulb.svg')
 const notebookIcon = require('../assets/icons/notebook.svg')
 const clipboardTextIcon = require('../assets/icons/clipboard-text.svg')
 const chatsIcon = require('../assets/icons/chats.svg')
+const warningIcon = require('../assets/icons/warning.svg')
+const wifiSlashIcon = require('../assets/icons/wifi-slash.svg')
+const microphoneSlashIcon = require('../assets/icons/microphone-slash.svg')
 
 // Helper to extract React component from require result
 const extractComponent = (module: any): React.ComponentType<SvgProps> | null => {
@@ -136,6 +139,15 @@ const iconRegistry: IconRegistry = {
   },
   'chats': {
     regular: extractComponent(chatsIcon) || chatsIcon.default || chatsIcon,
+  },
+  'warning': {
+    regular: extractComponent(warningIcon) || warningIcon.default || warningIcon,
+  },
+  'wifi-slash': {
+    regular: extractComponent(wifiSlashIcon) || wifiSlashIcon.default || wifiSlashIcon,
+  },
+  'microphone-slash': {
+    regular: extractComponent(microphoneSlashIcon) || microphoneSlashIcon.default || microphoneSlashIcon,
   },
 }
 

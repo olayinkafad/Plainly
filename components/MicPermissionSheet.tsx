@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { View, StyleSheet, Pressable, Modal, Animated, Image } from 'react-native'
+import { View, StyleSheet, Pressable, Modal, Animated, Image, Linking } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
@@ -8,12 +8,14 @@ import { Title, Body } from './typography'
 
 interface MicPermissionSheetProps {
   isOpen: boolean
+  mode?: 'request' | 'denied'
   onContinue: () => void
   onClose: () => void
 }
 
 export default function MicPermissionSheet({
   isOpen,
+  mode = 'request',
   onContinue,
   onClose,
 }: MicPermissionSheetProps) {
@@ -42,6 +44,8 @@ export default function MicPermissionSheet({
   })
 
   if (!isOpen) return null
+
+  const isDenied = mode === 'denied'
 
   return (
     <Modal
@@ -75,37 +79,78 @@ export default function MicPermissionSheet({
               <Icon name="x" size={20} color={themeLight.textSecondary} />
             </Pressable>
 
-            {/* Heading */}
-            <Title style={styles.heading}>
-              Allow Plainly to access your microphone
-            </Title>
+            {isDenied ? (
+              <>
+                {/* Denied mode */}
+                <Title style={styles.heading}>
+                  Microphone access needed
+                </Title>
+                <Body style={styles.subtext}>
+                  Plainly needs your microphone to record. You can turn it on in Settings.
+                </Body>
 
-            {/* Subtext */}
-            <Body style={styles.subtext}>
-              Plainly needs your microphone to hear what you're saying.
-            </Body>
+                <View style={{ height: 28 }} />
 
-            {/* Illustration */}
-            <View style={styles.illustrationContainer}>
-              <Image
-                source={require('../assets/images/first-time-user-avatar.png')}
-                style={styles.illustration}
-                resizeMode="contain"
-              />
-            </View>
+                {/* Open Settings button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.continueButton,
+                    pressed && styles.continueButtonPressed,
+                  ]}
+                  onPress={() => {
+                    Linking.openSettings()
+                    onClose()
+                  }}
+                  accessibilityLabel="Open Settings"
+                  accessibilityRole="button"
+                >
+                  <Body style={styles.continueButtonText}>Open Settings</Body>
+                </Pressable>
 
-            {/* Continue button */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.continueButton,
-                pressed && styles.continueButtonPressed,
-              ]}
-              onPress={onContinue}
-              accessibilityLabel="Continue to allow microphone access"
-              accessibilityRole="button"
-            >
-              <Body style={styles.continueButtonText}>Continue</Body>
-            </Pressable>
+                {/* Not now link */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.notNowButton,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  onPress={onClose}
+                >
+                  <Body style={styles.notNowText}>Not now</Body>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                {/* Request mode (first time) */}
+                <Title style={styles.heading}>
+                  Allow Plainly to access your microphone
+                </Title>
+                <Body style={styles.subtext}>
+                  Plainly needs your microphone to hear what you're saying.
+                </Body>
+
+                {/* Illustration */}
+                <View style={styles.illustrationContainer}>
+                  <Image
+                    source={require('../assets/images/first-time-user-avatar.png')}
+                    style={styles.illustration}
+                    resizeMode="contain"
+                  />
+                </View>
+
+                {/* Continue button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.continueButton,
+                    pressed && styles.continueButtonPressed,
+                  ]}
+                  onPress={onContinue}
+                  accessibilityLabel="Continue to allow microphone access"
+                  accessibilityRole="button"
+                >
+                  <Body style={styles.continueButtonText}>Continue</Body>
+                </Pressable>
+              </>
+            )}
           </Pressable>
         </Animated.View>
       </View>
@@ -129,8 +174,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 24, // --space-6
-    paddingTop: 32, // --space-8
+    paddingHorizontal: 24,
+    paddingTop: 32,
   },
   closeButton: {
     alignSelf: 'flex-end',
@@ -153,12 +198,12 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_400Regular',
     color: themeLight.textSecondary,
     textAlign: 'center',
-    marginTop: 12, // --space-3
+    marginTop: 12,
   },
   illustrationContainer: {
     alignItems: 'center',
-    marginTop: 24, // --space-6
-    marginBottom: 24, // --space-6
+    marginTop: 24,
+    marginBottom: 24,
   },
   illustration: {
     width: 180,
@@ -167,7 +212,7 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: themeLight.accent,
     borderRadius: 26,
-    paddingVertical: 16, // --space-4
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -176,7 +221,17 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     color: '#FFFFFF',
-    fontSize: 16, // --font-size-md
+    fontSize: 16,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+  },
+  notNowButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notNowText: {
+    color: themeLight.textSecondary,
+    fontSize: 15,
     fontFamily: 'PlusJakartaSans_600SemiBold',
   },
 })

@@ -13,9 +13,47 @@ import RecordingModal from '../components/RecordingModal'
 import RenameModal from '../components/RenameModal'
 import MicPermissionSheet from '../components/MicPermissionSheet'
 import { themeLight } from '../constants/theme'
+import { transcribeAudio, generateOutputs, generateRecordingTitle } from '../lib/api'
+import { StructuredSummary, StructuredTranscript } from '../types'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
+}
+
+// Pulsing dot for processing state
+function PulsingDot() {
+  const pulseAnim = useRef(new Animated.Value(0.3)).current
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ])
+    )
+    loop.start()
+    return () => loop.stop()
+  }, [pulseAnim])
+
+  return (
+    <Animated.View
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: themeLight.accent,
+        opacity: pulseAnim,
+      }}
+    />
+  )
 }
 
 export default function Home() {
@@ -30,6 +68,7 @@ export default function Home() {
   const [showRecordingModal, setShowRecordingModal] = useState(false)
   const [showToast, setShowToast] = useState(false)
   const [showMicPermission, setShowMicPermission] = useState(false)
+  const [micPermissionMode, setMicPermissionMode] = useState<'request' | 'denied'>('request')
   const toastAnim = useRef(new Animated.Value(0)).current
 
   // Deleted toast state
@@ -106,6 +145,12 @@ export default function Home() {
     }
     const { status } = await Audio.getPermissionsAsync()
     if (status === 'undetermined') {
+      setMicPermissionMode('request')
+      setShowMicPermission(true)
+      return
+    }
+    if (status === 'denied') {
+      setMicPermissionMode('denied')
       setShowMicPermission(true)
       return
     }
@@ -173,8 +218,12 @@ export default function Home() {
     }, 2000)
   }
 
-  const handleRecordingPress = (id: string) => {
-    router.push(`/recordings/${id}`)
+  const handleRecordingPress = (rec: Recording) => {
+    if (rec.status === 'failed') {
+      handleRetryRecording(rec)
+      return
+    }
+    router.push(`/recordings/${rec.id}`)
   }
 
   const handleEllipsisPress = (id: string) => {
@@ -237,6 +286,77 @@ export default function Home() {
       showDeletedToastNotification()
     } catch (error) {
       console.error('Failed to delete recording:', error)
+    }
+  }
+
+  const handleRetryRecording = async (rec: Recording) => {
+    // Set status to processing immediately
+    await recordingsStore.update(rec.id, { status: 'processing', processingError: undefined })
+    await loadRecordings()
+
+    try {
+      // Stage 1: Transcribe
+      const transcribeResult = await transcribeAudio(rec.audioBlobUrl)
+      if (transcribeResult.error) {
+        await recordingsStore.update(rec.id, { status: 'failed', processingError: transcribeResult.error })
+        await loadRecordings()
+        return
+      }
+
+      // Stage 2: Generate outputs
+      const outputsResult = await generateOutputs(transcribeResult.transcript)
+      if (outputsResult.error) {
+        // Partial success: save transcript if we have it
+        await recordingsStore.update(rec.id, { status: 'failed', processingError: outputsResult.error })
+        await loadRecordings()
+        return
+      }
+
+      // Parse outputs
+      let parsedSummary: StructuredSummary | string
+      try {
+        parsedSummary = JSON.parse(outputsResult.summary)
+      } catch {
+        parsedSummary = outputsResult.summary
+      }
+
+      let parsedTranscript: StructuredTranscript | string
+      try {
+        parsedTranscript = JSON.parse(outputsResult.structuredTranscript)
+      } catch {
+        parsedTranscript = outputsResult.structuredTranscript
+      }
+
+      // Save completed outputs
+      await recordingsStore.update(rec.id, {
+        status: 'completed',
+        processingError: undefined,
+        outputs: {
+          summary: parsedSummary,
+          transcript: parsedTranscript,
+        },
+        lastViewedFormat: 'summary',
+      })
+
+      // Auto-generate title in background
+      const summaryText = typeof parsedSummary === 'object' && 'gist' in parsedSummary
+        ? parsedSummary.gist
+        : typeof parsedSummary === 'string' ? parsedSummary : undefined
+
+      generateRecordingTitle(transcribeResult.transcript, summaryText)
+        .then(async (title) => {
+          if (title && title !== 'Recording') {
+            await recordingsStore.update(rec.id, { title })
+            await loadRecordings()
+          }
+        })
+        .catch(console.error)
+
+      await loadRecordings()
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to process recording'
+      await recordingsStore.update(rec.id, { status: 'failed', processingError: errorMsg })
+      await loadRecordings()
     }
   }
 
@@ -616,45 +736,66 @@ export default function Home() {
             <FlatList
               data={recordings}
               keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <Pressable
-                  style={styles.card}
-                  onPress={() => handleRecordingPress(item.id)}
-                >
-                  <View style={styles.cardHeader}>
-                    <Body style={styles.cardTitle} numberOfLines={2}>{item.title}</Body>
-                    <Pressable
-                      style={styles.cardEllipsis}
-                      onPress={(e) => {
-                        e?.stopPropagation?.()
-                        handleEllipsisPress(item.id)
-                      }}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Icon name="dots-three-vertical" size={20} color={themeLight.textSecondary} />
-                    </Pressable>
-                  </View>
-                  <Body style={styles.cardMeta}>
-                    {format(item.createdAt, 'MMM d')} · {format(item.createdAt, 'h:mm a')} · {formatDuration(item.durationSec)}
-                  </Body>
+              renderItem={({ item }) => {
+                const isProcessing = item.status === 'processing'
+                const isFailed = item.status === 'failed'
+
+                return (
                   <Pressable
-                    style={styles.replayButton}
-                    onPress={(e) => {
-                      e?.stopPropagation?.()
-                      loadAndPlayRecording(item)
-                    }}
+                    style={styles.card}
+                    onPress={() => handleRecordingPress(item)}
                   >
-                    <Body style={styles.replayButtonText}>
-                      {playingRecordingId === item.id && isPlaying ? 'Pause' : 'Play'}
-                    </Body>
-                    <Icon
-                      name={playingRecordingId === item.id && isPlaying ? 'pause' : 'play'}
-                      size={12}
-                      color="#FFFFFF"
-                    />
+                    <View style={styles.cardHeader}>
+                      {isProcessing ? (
+                        <View style={styles.processingTitleRow}>
+                          <PulsingDot />
+                          <Body style={styles.cardTitleProcessing}>Processing...</Body>
+                        </View>
+                      ) : (
+                        <Body style={styles.cardTitle} numberOfLines={2}>{item.title}</Body>
+                      )}
+                      <Pressable
+                        style={styles.cardEllipsis}
+                        onPress={(e) => {
+                          e?.stopPropagation?.()
+                          handleEllipsisPress(item.id)
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Icon name="dots-three-vertical" size={20} color={themeLight.textSecondary} />
+                      </Pressable>
+                    </View>
+                    {isFailed ? (
+                      <View style={styles.failedMetaRow}>
+                        <Icon name="warning" size={16} color={themeLight.accent} />
+                        <Body style={styles.cardMetaFailed}>Couldn't process {'\u2014'} tap to retry</Body>
+                      </View>
+                    ) : (
+                      <Body style={styles.cardMeta}>
+                        {format(item.createdAt, 'MMM d')} · {format(item.createdAt, 'h:mm a')} · {formatDuration(item.durationSec)}
+                      </Body>
+                    )}
+                    {!isProcessing && (
+                      <Pressable
+                        style={styles.replayButton}
+                        onPress={(e) => {
+                          e?.stopPropagation?.()
+                          loadAndPlayRecording(item)
+                        }}
+                      >
+                        <Body style={styles.replayButtonText}>
+                          {playingRecordingId === item.id && isPlaying ? 'Pause' : 'Play'}
+                        </Body>
+                        <Icon
+                          name={playingRecordingId === item.id && isPlaying ? 'pause' : 'play'}
+                          size={12}
+                          color="#FFFFFF"
+                        />
+                      </Pressable>
+                    )}
                   </Pressable>
-                </Pressable>
-              )}
+                )
+              }}
               ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
               contentContainerStyle={[
                 styles.cardList,
@@ -703,11 +844,16 @@ export default function Home() {
           loadRecordings()
         }}
         onSave={handleSaveRecording}
+        onPermissionDenied={() => {
+          setMicPermissionMode('denied')
+          setShowMicPermission(true)
+        }}
       />
 
       {/* Mic Permission Sheet */}
       <MicPermissionSheet
         isOpen={showMicPermission}
+        mode={micPermissionMode}
         onContinue={handleMicPermissionContinue}
         onClose={() => setShowMicPermission(false)}
       />
@@ -880,6 +1026,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: themeLight.textSecondary,
     marginTop: 2,
+  },
+  processingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  cardTitleProcessing: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 16,
+    color: themeLight.textSecondary,
+  },
+  failedMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 2,
+  },
+  cardMetaFailed: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 13,
+    color: themeLight.accent,
   },
   replayButton: {
     marginTop: 12,

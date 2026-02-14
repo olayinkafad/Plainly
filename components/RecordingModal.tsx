@@ -16,6 +16,7 @@ interface RecordingModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (recording: Recording, showToast?: boolean) => void
+  onPermissionDenied?: () => void
 }
 
 type RecordingState = 'idle' | 'recording' | 'paused'
@@ -38,12 +39,16 @@ const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
   return 16 + 28 * (1 - distance * 0.7) + Math.random() * 8
 })
 
+const MAX_RECORDING_DURATION = 1800 // 30 minutes in seconds
+const MAX_DURATION_WARNING_THRESHOLD = 0.9 // Show warning at 90%
+
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export default function RecordingModal({
   isOpen,
   onClose,
   onSave,
+  onPermissionDenied,
 }: RecordingModalProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -53,6 +58,13 @@ export default function RecordingModal({
   const [duration, setDuration] = useState(0)
   const [hasRecording, setHasRecording] = useState(false)
   const [showCloseSheet, setShowCloseSheet] = useState(false)
+  const [micInterrupted, setMicInterrupted] = useState(false)
+  const [micLost, setMicLost] = useState(false)
+  const [durationWarning, setDurationWarning] = useState(false)
+  const [maxLengthToast, setMaxLengthToast] = useState(false)
+  const maxLengthToastAnim = useRef(new Animated.Value(0)).current
+  const micReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const userInitiatedPauseRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const slideAnim = useRef(new Animated.Value(0)).current
   const hasStartedRef = useRef(false)
@@ -65,6 +77,12 @@ export default function RecordingModal({
   const [activeStep, setActiveStep] = useState(-1)
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set())
   const [processingError, setProcessingError] = useState<string | null>(null)
+  const [errorType, setErrorType] = useState<'network' | 'midway' | null>(null)
+  const [failedStepIndex, setFailedStepIndex] = useState<number | null>(null)
+  const [timeoutMessage, setTimeoutMessage] = useState<string | null>(null)
+  const timeoutMessageAnim = useRef(new Animated.Value(0)).current
+  const stepStartTimeRef = useRef<number>(0)
+  const timeoutIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const savedRecordingIdRef = useRef<string | null>(null)
   const savedAudioUriRef = useRef<string | null>(null)
 
@@ -112,6 +130,15 @@ export default function RecordingModal({
     setActiveStep(-1)
     setCompletedSteps(new Set())
     setProcessingError(null)
+    setErrorType(null)
+    setFailedStepIndex(null)
+    setTimeoutMessage(null)
+    timeoutMessageAnim.setValue(0)
+    stepStartTimeRef.current = 0
+    if (timeoutIntervalRef.current) {
+      clearInterval(timeoutIntervalRef.current)
+      timeoutIntervalRef.current = null
+    }
     savedRecordingIdRef.current = null
     savedAudioUriRef.current = null
 
@@ -139,7 +166,7 @@ export default function RecordingModal({
       dotLoopRef.current = null
     }
     dotScales.forEach(d => d.setValue(0.6))
-  }, [recordingViewOpacity, processingViewOpacity, stepAnims, dotScales])
+  }, [recordingViewOpacity, processingViewOpacity, stepAnims, dotScales, timeoutMessageAnim])
 
   useEffect(() => {
     if (isOpen) {
@@ -187,6 +214,9 @@ export default function RecordingModal({
       const { status } = await Audio.requestPermissionsAsync()
       if (status !== 'granted') {
         onClose()
+        if (onPermissionDenied) {
+          setTimeout(() => onPermissionDenied(), 300)
+        }
         return
       }
       await Audio.setAudioModeAsync({
@@ -244,9 +274,20 @@ export default function RecordingModal({
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       )
 
+      // Attach recording status listener for mic interruption detection
+      newRecording.setOnRecordingStatusUpdate((status) => {
+        if (!status.isRecording && !userInitiatedPauseRef.current && status.isDoneRecording === false) {
+          // Mic was interrupted unexpectedly
+          handleMicInterruption()
+        }
+      })
+      newRecording.setProgressUpdateInterval(1000)
+
       setRecording(newRecording)
       setRecordingState('recording')
       setHasRecording(true)
+      setMicInterrupted(false)
+      setMicLost(false)
       setDuration(0)
       startTimer()
       startWaveformAnimation()
@@ -271,6 +312,7 @@ export default function RecordingModal({
   const pauseRecording = async () => {
     if (!recording) return
     try {
+      userInitiatedPauseRef.current = true
       await recording.pauseAsync()
       setRecordingState('paused')
       stopTimer()
@@ -283,6 +325,9 @@ export default function RecordingModal({
   const resumeRecording = async () => {
     if (!recording) return
     try {
+      userInitiatedPauseRef.current = false
+      setMicInterrupted(false)
+      setMicLost(false)
       await recording.startAsync()
       setRecordingState('recording')
       startTimer()
@@ -309,6 +354,7 @@ export default function RecordingModal({
           audioBlobUrl: uri,
           outputs: {},
           lastViewedFormat: 'summary',
+          status: 'processing',
         }
 
         await onSave(newRecording, false)
@@ -348,6 +394,16 @@ export default function RecordingModal({
     setRecordingState('idle')
     setDuration(0)
     setHasRecording(false)
+    setMicInterrupted(false)
+    setMicLost(false)
+    setDurationWarning(false)
+    setMaxLengthToast(false)
+    maxLengthToastAnim.setValue(0)
+    userInitiatedPauseRef.current = false
+    if (micReconnectTimerRef.current) {
+      clearTimeout(micReconnectTimerRef.current)
+      micReconnectTimerRef.current = null
+    }
     stopTimer()
     stopWaveformAnimation()
     hasStartedRef.current = false
@@ -361,6 +417,47 @@ export default function RecordingModal({
     }
   }
 
+  // ── Mic Interruption ──
+
+  const handleMicInterruption = () => {
+    if (recordingState !== 'recording' || phase !== 'recording') return
+
+    setMicInterrupted(true)
+    setRecordingState('paused')
+    stopTimer()
+    stopWaveformAnimation()
+
+    // Start 5-second reconnection timer
+    if (micReconnectTimerRef.current) {
+      clearTimeout(micReconnectTimerRef.current)
+    }
+    micReconnectTimerRef.current = setTimeout(() => {
+      // If still interrupted after 5s, show "mic lost" state
+      setMicLost(true)
+    }, 5000)
+  }
+
+  const handleMicSaveAndFinish = async () => {
+    if (micReconnectTimerRef.current) {
+      clearTimeout(micReconnectTimerRef.current)
+      micReconnectTimerRef.current = null
+    }
+    setMicInterrupted(false)
+    setMicLost(false)
+    await saveAndCloseRecording()
+  }
+
+  const handleMicDiscard = async () => {
+    if (micReconnectTimerRef.current) {
+      clearTimeout(micReconnectTimerRef.current)
+      micReconnectTimerRef.current = null
+    }
+    setMicInterrupted(false)
+    setMicLost(false)
+    await resetRecording()
+    onClose()
+  }
+
   // ── Timer ──
 
   const startTimer = () => {
@@ -368,8 +465,42 @@ export default function RecordingModal({
       clearInterval(timerRef.current)
     }
     timerRef.current = setInterval(() => {
-      setDuration((prev) => prev + 0.5)
+      setDuration((prev) => {
+        const next = prev + 0.5
+        // Check max duration thresholds
+        if (next >= MAX_RECORDING_DURATION) {
+          // Auto-stop at max duration
+          setTimeout(() => autoStopAtMaxDuration(), 0)
+          return MAX_RECORDING_DURATION
+        }
+        if (next >= MAX_RECORDING_DURATION * MAX_DURATION_WARNING_THRESHOLD) {
+          setDurationWarning(true)
+        }
+        return next
+      })
     }, 500)
+  }
+
+  const autoStopAtMaxDuration = async () => {
+    // Show toast
+    setMaxLengthToast(true)
+    Animated.timing(maxLengthToastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+
+    // Auto-dismiss toast after 2s
+    setTimeout(() => {
+      Animated.timing(maxLengthToastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setMaxLengthToast(false))
+    }, 2000)
+
+    // Stop and process
+    await saveAndCloseRecording()
   }
 
   const stopTimer = () => {
@@ -468,6 +599,22 @@ export default function RecordingModal({
     setActiveStep(index)
     startDotBounce()
 
+    // Start timeout tracking for this step
+    stepStartTimeRef.current = Date.now()
+    setTimeoutMessage(null)
+    timeoutMessageAnim.setValue(0)
+    if (timeoutIntervalRef.current) {
+      clearInterval(timeoutIntervalRef.current)
+    }
+    timeoutIntervalRef.current = setInterval(() => {
+      const elapsed = (Date.now() - stepStartTimeRef.current) / 1000
+      if (elapsed >= 30) {
+        setTimeoutMessage('Still working on it. You can wait or come back \u2014 we\u2019ll finish in the background.')
+      } else if (elapsed >= 15) {
+        setTimeoutMessage('Taking longer than usual...')
+      }
+    }, 1000)
+
     Animated.parallel([
       Animated.timing(stepAnims[index].opacity, {
         toValue: 1,
@@ -487,6 +634,15 @@ export default function RecordingModal({
   const completeStepAnim = (index: number) => {
     setCompletedSteps(prev => new Set(prev).add(index))
     stopDotBounce()
+
+    // Clear timeout tracking
+    if (timeoutIntervalRef.current) {
+      clearInterval(timeoutIntervalRef.current)
+      timeoutIntervalRef.current = null
+    }
+    setTimeoutMessage(null)
+    timeoutMessageAnim.setValue(0)
+    stepStartTimeRef.current = 0
 
     Animated.sequence([
       Animated.timing(stepAnims[index].checkScale, {
@@ -523,11 +679,15 @@ export default function RecordingModal({
       }
     })
 
+  const isNetworkError = (errorMsg: string) => {
+    const lower = errorMsg.toLowerCase()
+    return lower.includes('network') || lower.includes('connect') || lower.includes('no connection')
+  }
+
   const callProcessingAPI = async () => {
     const audioUri = savedAudioUriRef.current
     if (!audioUri) {
       apiErrorRef.current = 'No audio URI available'
-      // Resolve all remaining steps so the sequence can finish
       for (let i = 0; i < PROCESSING_STEPS.length; i++) resolveStep(i)
       return
     }
@@ -538,15 +698,20 @@ export default function RecordingModal({
 
       if (processingAbortedRef.current) return
 
-      // Step 0 done (audio sent and transcript received)
-      resolveStep(0)
-
       if (transcribeResult.error) {
         apiErrorRef.current = transcribeResult.error
-        // Resolve remaining steps to unblock sequence
+        // Detect network error (upload failed)
+        if (isNetworkError(transcribeResult.error)) {
+          setErrorType('network')
+          setFailedStepIndex(0)
+        }
+        resolveStep(0)
         for (let i = 1; i < PROCESSING_STEPS.length; i++) resolveStep(i)
         return
       }
+
+      // Step 0 done (audio sent and transcript received)
+      resolveStep(0)
 
       // Step 1: "Cleaning up your words" — transcription is already done, mark complete
       resolveStep(1)
@@ -560,6 +725,15 @@ export default function RecordingModal({
 
       if (outputsResult.error) {
         apiErrorRef.current = outputsResult.error
+        // This is a midway failure — transcription succeeded but output generation failed
+        setErrorType('midway')
+        setFailedStepIndex(2)
+        // Store partial result (transcript exists)
+        apiResultRef.current = {
+          transcript: transcribeResult.transcript,
+          summary: '',
+          structuredTranscript: '',
+        }
         resolveStep(2)
         resolveStep(3)
         return
@@ -593,7 +767,12 @@ export default function RecordingModal({
       resolveStep(3)
     } catch (error) {
       if (processingAbortedRef.current) return
-      apiErrorRef.current = error instanceof Error ? error.message : 'Failed to process recording'
+      const errorMsg = error instanceof Error ? error.message : 'Failed to process recording'
+      apiErrorRef.current = errorMsg
+      if (isNetworkError(errorMsg)) {
+        setErrorType('network')
+        setFailedStepIndex(0)
+      }
       for (let i = 0; i < PROCESSING_STEPS.length; i++) resolveStep(i)
     }
   }
@@ -659,6 +838,14 @@ export default function RecordingModal({
 
   const handleRetryProcessing = () => {
     setProcessingError(null)
+    setErrorType(null)
+    setFailedStepIndex(null)
+    setTimeoutMessage(null)
+    timeoutMessageAnim.setValue(0)
+    if (timeoutIntervalRef.current) {
+      clearInterval(timeoutIntervalRef.current)
+      timeoutIntervalRef.current = null
+    }
     setActiveStep(-1)
     setCompletedSteps(new Set())
 
@@ -685,18 +872,53 @@ export default function RecordingModal({
   const finishProcessing = async () => {
     const savedId = savedRecordingIdRef.current
 
+    // Clear timeout tracking
+    if (timeoutIntervalRef.current) {
+      clearInterval(timeoutIntervalRef.current)
+      timeoutIntervalRef.current = null
+    }
+
     // Check for API errors
     if (apiErrorRef.current) {
       if (savedId && apiErrorRef.current?.includes('No speech detected')) {
         // Navigate to result screen to show empty state
+        await recordingsStore.update(savedId, { status: 'completed' })
         resetProcessingState()
         setDuration(0)
         onClose()
         setTimeout(() => {
           router.replace(`/recordings/${savedId}`)
         }, 300)
+      } else if (errorType === 'midway' && savedId && apiResultRef.current) {
+        // Midway failure: save partial results and show error with "Go to recording" option
+        const { transcript, structuredTranscript } = apiResultRef.current
+        const updates: any = {
+          status: 'failed' as const,
+          processingError: apiErrorRef.current,
+        }
+        // Save transcript if we have it
+        if (transcript && structuredTranscript) {
+          updates.outputs = { transcript: structuredTranscript }
+        }
+        await recordingsStore.update(savedId, updates)
+        setProcessingError(apiErrorRef.current || 'Something went wrong.')
+      } else if (errorType === 'network') {
+        // Network failure: mark as failed, show network error UI
+        if (savedId) {
+          await recordingsStore.update(savedId, {
+            status: 'failed',
+            processingError: apiErrorRef.current,
+          })
+        }
+        setProcessingError(apiErrorRef.current || 'No connection.')
       } else {
-        // Show error inline within the processing view
+        // Generic error
+        if (savedId) {
+          await recordingsStore.update(savedId, {
+            status: 'failed',
+            processingError: apiErrorRef.current,
+          })
+        }
         setProcessingError(apiErrorRef.current || 'Something went wrong. Please try again.')
       }
       return
@@ -707,6 +929,7 @@ export default function RecordingModal({
       const { summary, structuredTranscript, transcript } = apiResultRef.current
 
       await recordingsStore.update(savedId, {
+        status: 'completed',
         outputs: {
           summary: summary,
           transcript: structuredTranscript,
@@ -831,19 +1054,33 @@ export default function RecordingModal({
               {/* Timer */}
               <Body style={styles.timer}>{formatTime(duration)}</Body>
 
+              {/* Duration warning */}
+              {durationWarning && recordingState === 'recording' && (
+                <Body style={styles.durationWarningText}>Recording will end soon</Body>
+              )}
+
               {/* Status text */}
-              {recordingState === 'recording' && (
+              {micInterrupted && !micLost ? (
+                <>
+                  <Title style={styles.listeningText}>I'm listening...</Title>
+                  <Body style={styles.micInterruptedText}>Recording paused {'\u2014'} microphone disconnected.</Body>
+                </>
+              ) : micLost ? (
+                <>
+                  <Title style={styles.listeningText}>I'm listening...</Title>
+                  <Body style={styles.micInterruptedText}>Microphone lost. You can save what you have or try again.</Body>
+                </>
+              ) : recordingState === 'recording' ? (
                 <>
                   <Title style={styles.listeningText}>I'm listening...</Title>
                   <Body style={styles.subtitleText}>Speak naturally. No need to rehearse.</Body>
                 </>
-              )}
-              {recordingState === 'paused' && (
+              ) : recordingState === 'paused' ? (
                 <>
                   <Title style={styles.listeningText}>Recording paused</Title>
                   <Body style={styles.subtitleText}>Tap resume to continue.</Body>
                 </>
-              )}
+              ) : null}
 
               {/* Waveform */}
               {(recordingState === 'recording' || recordingState === 'paused') && (
@@ -864,40 +1101,84 @@ export default function RecordingModal({
               )}
 
               {/* Buttons */}
-              <View style={styles.buttonRow}>
-                {/* Pause / Resume */}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.pauseButton,
-                    pressed && styles.pauseButtonPressed,
-                  ]}
-                  onPress={recordingState === 'recording' ? pauseRecording : resumeRecording}
-                  disabled={!hasRecording}
-                >
-                  <Body style={styles.pauseButtonText}>
-                    {recordingState === 'recording' ? 'Pause' : 'Resume'}
-                  </Body>
-                  <Icon
-                    name={recordingState === 'recording' ? 'pause' : 'play'}
-                    size={16}
-                    color={themeLight.textPrimary}
-                  />
-                </Pressable>
+              {micLost ? (
+                <View style={styles.buttonRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.completeButton,
+                      pressed && styles.completeButtonPressed,
+                    ]}
+                    onPress={handleMicSaveAndFinish}
+                  >
+                    <Body style={styles.completeButtonText}>Save and finish</Body>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.pauseButton,
+                      pressed && styles.pauseButtonPressed,
+                    ]}
+                    onPress={handleMicDiscard}
+                  >
+                    <Body style={styles.pauseButtonText}>Discard</Body>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.buttonRow}>
+                  {/* Pause / Resume */}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.pauseButton,
+                      pressed && styles.pauseButtonPressed,
+                    ]}
+                    onPress={recordingState === 'recording' ? pauseRecording : resumeRecording}
+                    disabled={!hasRecording}
+                  >
+                    <Body style={styles.pauseButtonText}>
+                      {recordingState === 'recording' ? 'Pause' : 'Resume'}
+                    </Body>
+                    <Icon
+                      name={recordingState === 'recording' ? 'pause' : 'play'}
+                      size={16}
+                      color={themeLight.textPrimary}
+                    />
+                  </Pressable>
 
-                {/* Tap to complete */}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.completeButton,
-                    pressed && styles.completeButtonPressed,
-                  ]}
-                  onPress={stopRecording}
-                  disabled={!hasRecording}
-                >
-                  <Body style={styles.completeButtonText}>Tap to complete</Body>
-                  <Icon name="check" size={16} color="#FFFFFF" />
-                </Pressable>
-              </View>
+                  {/* Tap to complete */}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.completeButton,
+                      pressed && styles.completeButtonPressed,
+                    ]}
+                    onPress={stopRecording}
+                    disabled={!hasRecording}
+                  >
+                    <Body style={styles.completeButtonText}>Tap to complete</Body>
+                    <Icon name="check" size={16} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+              )}
             </View>
+
+            {/* Max length toast */}
+            {maxLengthToast && (
+              <Animated.View
+                style={[
+                  styles.maxLengthToast,
+                  {
+                    opacity: maxLengthToastAnim,
+                    transform: [{
+                      translateY: maxLengthToastAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-10, 0],
+                      }),
+                    }],
+                  },
+                ]}
+                pointerEvents="none"
+              >
+                <Body style={styles.maxLengthToastText}>Maximum length reached</Body>
+              </Animated.View>
+            )}
           </Animated.View>
 
           {/* ── Processing View (fades in during processing) ── */}
@@ -906,7 +1187,106 @@ export default function RecordingModal({
             pointerEvents={phase === 'processing' ? 'auto' : 'none'}
           >
             <View style={styles.processingContainer}>
-              {processingError ? (
+              {processingError && errorType === 'network' ? (
+                /* ── Network Error (upload failed) ── */
+                <View style={styles.processingErrorContainer}>
+                  <Icon name="wifi-slash" size={32} color={themeLight.accent} style={{ marginBottom: 16 }} />
+                  <Title style={styles.processingErrorTitle}>No connection</Title>
+                  <Body style={styles.processingErrorBody}>
+                    Your recording is saved on your device.
+                  </Body>
+                  <Pressable
+                    style={({ pressed }) => [styles.processingRetryButton, pressed && { opacity: 0.8 }]}
+                    onPress={handleRetryProcessing}
+                  >
+                    <Body style={styles.processingRetryText}>Try again</Body>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.processingGoBackLink, pressed && { opacity: 0.6 }]}
+                    onPress={() => {
+                      resetProcessingState()
+                      setDuration(0)
+                      onClose()
+                    }}
+                  >
+                    <Body style={styles.processingGoBackText}>Go back</Body>
+                  </Pressable>
+                </View>
+              ) : processingError && errorType === 'midway' ? (
+                /* ── Midway Failure (transcription OK, output generation failed) ── */
+                <View style={styles.processingErrorContainer}>
+                  <View style={styles.stepsGroup}>
+                    {PROCESSING_STEPS.map((label, i) => {
+                      if (i > activeStep) return null
+                      const isCompleted = completedSteps.has(i)
+                      const isFailed = failedStepIndex === i
+                      return (
+                        <Animated.View
+                          key={i}
+                          style={[
+                            styles.stepRow,
+                            i > 0 && styles.stepRowSpacing,
+                            {
+                              opacity: stepAnims[i].opacity,
+                              transform: [{ translateY: stepAnims[i].translateY }],
+                            },
+                          ]}
+                        >
+                          <View style={styles.stepIndicator}>
+                            {isFailed ? (
+                              <Icon name="warning" size={20} color={themeLight.accent} />
+                            ) : isCompleted ? (
+                              <Animated.View
+                                style={[
+                                  styles.checkCircle,
+                                  { transform: [{ scale: stepAnims[i].checkScale }] },
+                                ]}
+                              >
+                                <Icon name="check" size={14} color="#FFFFFF" />
+                              </Animated.View>
+                            ) : (
+                              <View style={styles.dotRow}>
+                                {dotScales.map((dotScale, di) => (
+                                  <Animated.View
+                                    key={di}
+                                    style={[
+                                      styles.dot,
+                                      { transform: [{ scale: dotScale }] },
+                                    ]}
+                                  />
+                                ))}
+                              </View>
+                            )}
+                          </View>
+                          <Body style={isFailed ? styles.stepTextFailed : isCompleted ? styles.stepTextCompleted : styles.stepTextActive}>
+                            {isFailed ? 'Something went wrong' : label}
+                          </Body>
+                        </Animated.View>
+                      )
+                    })}
+                  </View>
+                  <Body style={styles.midwayErrorSubtext}>
+                    We saved your recording. We'll try processing it again.
+                  </Body>
+                  <Pressable
+                    style={({ pressed }) => [styles.processingRetryButton, pressed && { opacity: 0.8 }]}
+                    onPress={() => {
+                      const savedId = savedRecordingIdRef.current
+                      resetProcessingState()
+                      setDuration(0)
+                      onClose()
+                      if (savedId) {
+                        setTimeout(() => {
+                          router.replace(`/recordings/${savedId}`)
+                        }, 300)
+                      }
+                    }}
+                  >
+                    <Body style={styles.processingRetryText}>Go to recording</Body>
+                  </Pressable>
+                </View>
+              ) : processingError ? (
+                /* ── Generic Error ── */
                 <View style={styles.processingErrorContainer}>
                   <Title style={styles.processingErrorTitle}>Something went wrong</Title>
                   <Body style={styles.processingErrorBody}>{processingError}</Body>
@@ -928,6 +1308,7 @@ export default function RecordingModal({
                   </Pressable>
                 </View>
               ) : (
+                /* ── Normal Processing Steps ── */
                 <View style={styles.stepsGroup}>
                   {PROCESSING_STEPS.map((label, i) => {
                     if (i > activeStep) return null
@@ -977,6 +1358,28 @@ export default function RecordingModal({
                       </Animated.View>
                     )
                   })}
+
+                  {/* Timeout message */}
+                  {timeoutMessage && (
+                    <View style={styles.timeoutMessageContainer}>
+                      <Body style={styles.timeoutMessageText}>{timeoutMessage}</Body>
+                      {timeoutMessage.includes('come back') && (
+                        <Pressable
+                          style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                          onPress={() => {
+                            resetProcessingState()
+                            setDuration(0)
+                            onClose()
+                            setTimeout(() => {
+                              router.replace('/home')
+                            }, 300)
+                          }}
+                        >
+                          <Body style={styles.timeoutGoHomeLink}>Go to home</Body>
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -1274,6 +1677,89 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 15,
     color: themeLight.textPrimary,
+  },
+  processingGoBackLink: {
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  processingGoBackText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
+    color: themeLight.textSecondary,
+  },
+  stepTextFailed: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: themeLight.accent,
+    marginLeft: 12,
+  },
+  midwayErrorSubtext: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
+    color: themeLight.textSecondary,
+    textAlign: 'center',
+    marginTop: 28,
+    marginBottom: 28,
+    paddingHorizontal: 16,
+  },
+  timeoutMessageContainer: {
+    marginTop: 24,
+    alignItems: 'flex-start',
+    paddingLeft: 34 + 12,
+  },
+  timeoutMessageText: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 14,
+    color: themeLight.textSecondary,
+    lineHeight: 20,
+  },
+  timeoutGoHomeLink: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 14,
+    color: themeLight.accent,
+    marginTop: 8,
+  },
+
+  // ── Mic Interruption ──
+  micInterruptedText: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 14,
+    color: themeLight.accent,
+    textAlign: 'center',
+    marginTop: 10,
+    paddingHorizontal: 16,
+  },
+  durationWarningText: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 13,
+    color: themeLight.textTertiary,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  maxLengthToast: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeLight.success,
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    gap: 8,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  maxLengthToastText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFFFFF',
   },
 
   // ── Close Action Sheet ──

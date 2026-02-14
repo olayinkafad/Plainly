@@ -463,31 +463,44 @@ export default function RecordingDetail() {
     return false
   }
 
-  const getEmptyStateContent = (fmt: OutputType, output?: any) => {
-    const confidenceNotes = output && typeof output === 'object' && output.confidence_notes
-      ? output.confidence_notes
-      : null
+  const getEmptyStateContent = (fmt: OutputType, outputs: Recording['outputs']) => {
+    const summaryUnavailable = isFormatUnavailable('summary', outputs.summary)
+    const transcriptUnavailable = isFormatUnavailable('transcript', outputs.transcript)
+    const bothFailed = summaryUnavailable && transcriptUnavailable
 
-    let bodyMessage = "This recording didn't include enough information."
-    if (confidenceNotes) {
-      if (confidenceNotes.possible_missed_words || confidenceNotes.noisy_audio_suspected) {
-        bodyMessage = "Parts of the recording may have been hard to hear."
-      } else if (confidenceNotes.mixed_language_detected) {
-        bodyMessage = "Mixed languages can be harder to capture perfectly."
+    if (bothFailed) {
+      return {
+        title: "We couldn\u2019t make sense of this one",
+        body: "The recording was too short or unclear. You can still replay it.",
+        link: null,
+        linkTarget: null as OutputType | null,
       }
     }
 
-    const titles: Record<OutputType, string> = {
-      summary: "Not enough to summarise",
-      transcript: "We couldn't transcribe this clearly",
+    if (fmt === 'summary' && summaryUnavailable && !transcriptUnavailable) {
+      return {
+        title: "Too short to summarise",
+        body: "There wasn\u2019t enough here to pull out key points. Your full transcript is still available.",
+        link: "View transcript",
+        linkTarget: 'transcript' as OutputType,
+      }
     }
 
+    if (fmt === 'transcript' && transcriptUnavailable && !summaryUnavailable) {
+      return {
+        title: "Hard to make out",
+        body: "The audio wasn\u2019t clear enough for a full transcript. We still pulled together a summary from what we could catch.",
+        link: "View summary",
+        linkTarget: 'summary' as OutputType,
+      }
+    }
+
+    // Fallback
     return {
-      title: titles[fmt] || "We couldn't create this just yet",
-      body: bodyMessage,
-      suggestion: fmt === 'summary'
-        ? 'Try viewing the Transcript instead.'
-        : 'Try viewing the Summary instead.',
+      title: "We couldn\u2019t create this just yet",
+      body: "This recording didn\u2019t include enough information.",
+      link: null,
+      linkTarget: null as OutputType | null,
     }
   }
 
@@ -665,12 +678,19 @@ export default function RecordingDetail() {
             const isUnavailable = isFormatUnavailable(activeFormat, output)
 
             if (isUnavailable) {
-              const emptyState = getEmptyStateContent(activeFormat, output)
+              const emptyState = getEmptyStateContent(activeFormat, recording.outputs)
               return (
                 <View style={styles.emptyContentContainer}>
                   <Title style={styles.emptyTitle}>{emptyState.title}</Title>
                   <Body style={styles.emptyBody}>{emptyState.body}</Body>
-                  <Body style={styles.emptySuggestion}>{emptyState.suggestion}</Body>
+                  {emptyState.link && emptyState.linkTarget && (
+                    <Pressable
+                      onPress={() => handleFormatSwitch(emptyState.linkTarget!)}
+                      style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+                    >
+                      <Body style={styles.emptyLink}>{emptyState.link}</Body>
+                    </Pressable>
+                  )}
                 </View>
               )
             }
@@ -1008,25 +1028,27 @@ const styles = StyleSheet.create({
     minHeight: 300,
   },
   emptyTitle: {
+    fontFamily: 'PlayfairDisplay_700Bold',
     fontSize: 20,
     color: themeLight.textPrimary,
     textAlign: 'center',
     marginBottom: 12,
   },
   emptyBody: {
+    fontFamily: 'PlusJakartaSans_400Regular',
     color: themeLight.textSecondary,
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 24,
     marginBottom: 16,
     paddingHorizontal: 16,
   },
-  emptySuggestion: {
-    color: themeLight.textTertiary,
-    fontSize: 13,
+  emptyLink: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: themeLight.accent,
+    fontSize: 14,
     textAlign: 'center',
-    fontStyle: 'italic',
-    paddingHorizontal: 16,
+    marginTop: 4,
   },
 
   // Tooltip overlay

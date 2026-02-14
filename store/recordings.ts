@@ -12,6 +12,8 @@ export interface Recording {
     transcript?: TranscriptOutput
   }
   lastViewedFormat?: OutputType
+  status?: 'processing' | 'failed' | 'completed'
+  processingError?: string
 }
 
 const STORAGE_KEY = '@plainly_recordings'
