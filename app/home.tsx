@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated, LayoutAn
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import { Audio } from 'expo-av'
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync, getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio'
 import Icon from '../components/Icon'
 import { format } from 'date-fns'
 import { Title, Body, Meta } from '../components/typography'
@@ -84,14 +84,13 @@ export default function Home() {
   // ── Mini Player State ──
   const SPEED_OPTIONS = [1, 1.5, 2, 0.5] as const
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null)
-  const [miniPlayerSound, setMiniPlayerSound] = useState<Audio.Sound | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [playbackPosition, setPlaybackPosition] = useState(0)
-  const [playbackDuration, setPlaybackDuration] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [miniPlayerVisible, setMiniPlayerVisible] = useState(false)
-  const positionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const scrubberWidthRef = useRef(200)
+
+  // expo-audio hooks for mini player
+  const player = useAudioPlayer(null)
+  const playerStatus = useAudioPlayerStatus(player)
 
   useEffect(() => {
     loadRecordings()
@@ -115,17 +114,12 @@ export default function Home() {
     }
   }, [params.deleted])
 
-  // Cleanup sound on unmount
+  // Handle didJustFinish — expo-audio does NOT auto-reset position
   useEffect(() => {
-    return () => {
-      if (miniPlayerSound) {
-        miniPlayerSound.unloadAsync().catch(console.error)
-      }
-      if (positionIntervalRef.current) {
-        clearInterval(positionIntervalRef.current)
-      }
+    if (playerStatus.didJustFinish) {
+      player.seekTo(0)
     }
-  }, [miniPlayerSound])
+  }, [playerStatus.didJustFinish, player])
 
   const loadRecordings = async () => {
     try {
@@ -143,7 +137,7 @@ export default function Home() {
     if (miniPlayerVisible) {
       closeMiniPlayer()
     }
-    const { status } = await Audio.getPermissionsAsync()
+    const { status } = await getRecordingPermissionsAsync()
     if (status === 'undetermined') {
       setMicPermissionMode('request')
       setShowMicPermission(true)
@@ -159,7 +153,7 @@ export default function Home() {
 
   const handleMicPermissionContinue = async () => {
     setShowMicPermission(false)
-    const { status } = await Audio.requestPermissionsAsync()
+    const { status } = await requestRecordingPermissionsAsync()
     if (status === 'granted') {
       setShowRecordingModal(true)
     }
@@ -382,168 +376,64 @@ export default function Home() {
 
   const loadAndPlayRecording = async (rec: Recording) => {
     // If same recording, just toggle
-    if (playingRecordingId === rec.id && miniPlayerSound) {
+    if (playingRecordingId === rec.id) {
       togglePlayback()
       return
     }
 
-    // Unload previous
-    if (miniPlayerSound) {
-      try {
-        await miniPlayerSound.stopAsync()
-        await miniPlayerSound.unloadAsync()
-      } catch (e) {
-        // Ignore
-      }
-      if (positionIntervalRef.current) {
-        clearInterval(positionIntervalRef.current)
-        positionIntervalRef.current = null
-      }
-    }
-
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
       })
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: rec.audioBlobUrl },
-        { shouldPlay: true }
-      )
+      player.replace({ uri: rec.audioBlobUrl })
+      player.play()
 
-      const status = await newSound.getStatusAsync()
-      if (status.isLoaded) {
-        setPlaybackDuration(status.durationMillis || rec.durationSec * 1000)
-      }
-
-      newSound.setOnPlaybackStatusUpdate((s) => {
-        if (s.isLoaded) {
-          setPlaybackPosition(s.positionMillis || 0)
-          if (s.didJustFinish) {
-            setIsPlaying(false)
-            setPlaybackPosition(0)
-            newSound.setPositionAsync(0).catch(console.error)
-            if (positionIntervalRef.current) {
-              clearInterval(positionIntervalRef.current)
-              positionIntervalRef.current = null
-            }
-          }
-        }
-      })
-
-      setMiniPlayerSound(newSound)
       setPlayingRecordingId(rec.id)
-      setIsPlaying(true)
-      setPlaybackPosition(0)
       setPlaybackSpeed(1)
 
       if (!miniPlayerVisible) {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
         setMiniPlayerVisible(true)
       }
-
-      // Position polling
-      positionIntervalRef.current = setInterval(async () => {
-        try {
-          const currentStatus = await newSound.getStatusAsync()
-          if (currentStatus.isLoaded) {
-            setPlaybackPosition(currentStatus.positionMillis || 0)
-          }
-        } catch (e) {
-          // Ignore
-        }
-      }, 100)
     } catch (error) {
       console.error('Failed to load audio:', error)
     }
   }
 
-  const togglePlayback = async () => {
-    if (!miniPlayerSound) return
-    try {
-      if (isPlaying) {
-        await miniPlayerSound.pauseAsync()
-        setIsPlaying(false)
-        if (positionIntervalRef.current) {
-          clearInterval(positionIntervalRef.current)
-          positionIntervalRef.current = null
-        }
-      } else {
-        const status = await miniPlayerSound.getStatusAsync()
-        if (status.isLoaded) {
-          const pos = status.positionMillis || 0
-          const dur = status.durationMillis || playbackDuration
-          if (pos >= dur - 100) {
-            await miniPlayerSound.setPositionAsync(0)
-            setPlaybackPosition(0)
-          }
-        }
-        await miniPlayerSound.playAsync()
-        setIsPlaying(true)
-        if (!positionIntervalRef.current) {
-          positionIntervalRef.current = setInterval(async () => {
-            try {
-              const s = await miniPlayerSound.getStatusAsync()
-              if (s.isLoaded) {
-                setPlaybackPosition(s.positionMillis || 0)
-              }
-            } catch (e) {
-              // Ignore
-            }
-          }, 100)
-        }
+  const togglePlayback = () => {
+    if (playerStatus.playing) {
+      player.pause()
+    } else {
+      const currentSec = playerStatus.currentTime ?? 0
+      const totalSec = playerStatus.duration ?? 0
+      if (totalSec > 0 && currentSec >= totalSec - 0.1) {
+        player.seekTo(0)
       }
-    } catch (error) {
-      console.error('Failed to toggle playback:', error)
+      player.play()
     }
   }
 
-  const handleScrubberPress = async (event: any) => {
-    if (!miniPlayerSound) return
-    try {
-      const { locationX } = event.nativeEvent
-      const pct = locationX / scrubberWidthRef.current
-      const newPos = pct * playbackDuration
-      await miniPlayerSound.setPositionAsync(Math.max(0, Math.min(newPos, playbackDuration)))
-      setPlaybackPosition(Math.max(0, Math.min(newPos, playbackDuration)))
-    } catch (error) {
-      console.error('Failed to scrub:', error)
-    }
+  const handleScrubberPress = (event: any) => {
+    const { locationX } = event.nativeEvent
+    const pct = locationX / scrubberWidthRef.current
+    const totalSec = playerStatus.duration ?? 0
+    player.seekTo(Math.max(0, Math.min(pct * totalSec, totalSec)))
   }
 
-  const cycleSpeed = async () => {
+  const cycleSpeed = () => {
     const currentIndex = SPEED_OPTIONS.indexOf(playbackSpeed as typeof SPEED_OPTIONS[number])
     const nextIndex = (currentIndex + 1) % SPEED_OPTIONS.length
     const nextSpeed = SPEED_OPTIONS[nextIndex]
     setPlaybackSpeed(nextSpeed)
-    if (miniPlayerSound) {
-      try {
-        await miniPlayerSound.setRateAsync(nextSpeed, true)
-      } catch (e) {
-        // Ignore
-      }
-    }
+    player.setPlaybackRate(nextSpeed)
   }
 
-  const closeMiniPlayer = async () => {
-    if (miniPlayerSound) {
-      try {
-        await miniPlayerSound.stopAsync()
-        await miniPlayerSound.unloadAsync()
-      } catch (e) {
-        // Ignore
-      }
-    }
-    if (positionIntervalRef.current) {
-      clearInterval(positionIntervalRef.current)
-      positionIntervalRef.current = null
-    }
-    setMiniPlayerSound(null)
+  const closeMiniPlayer = () => {
+    player.pause()
+    player.replace(null)
     setPlayingRecordingId(null)
-    setIsPlaying(false)
-    setPlaybackPosition(0)
-    setPlaybackDuration(0)
     setPlaybackSpeed(1)
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
     setMiniPlayerVisible(false)
@@ -691,10 +581,10 @@ export default function Home() {
             {miniPlayerVisible && (
               <View style={styles.miniPlayer}>
                 <Pressable style={styles.miniPlayButton} onPress={togglePlayback}>
-                  <Icon name={isPlaying ? 'pause' : 'play'} size={16} color="#FFFFFF" />
+                  <Icon name={playerStatus.playing ? 'pause' : 'play'} size={16} color="#FFFFFF" />
                 </Pressable>
                 <Body style={[styles.miniTimeText, { marginLeft: 12 }]}>
-                  {formatTimeMs(playbackPosition)}
+                  {formatTimeMs((playerStatus.currentTime ?? 0) * 1000)}
                 </Body>
                 <Pressable
                   style={styles.miniProgressTrack}
@@ -704,12 +594,12 @@ export default function Home() {
                   <View
                     style={[
                       styles.miniProgressFill,
-                      { width: `${playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0}%` },
+                      { width: `${(playerStatus.duration ?? 0) > 0 ? ((playerStatus.currentTime ?? 0) / (playerStatus.duration ?? 1)) * 100 : 0}%` },
                     ]}
                   />
                 </Pressable>
                 <Body style={styles.miniTimeText}>
-                  {formatTimeMs(playbackDuration)}
+                  {formatTimeMs((playerStatus.duration ?? 0) * 1000)}
                 </Body>
                 <Pressable style={styles.miniSpeedPill} onPress={cycleSpeed}>
                   <Body style={styles.miniSpeedText}>
@@ -784,10 +674,10 @@ export default function Home() {
                         }}
                       >
                         <Body style={styles.replayButtonText}>
-                          {playingRecordingId === item.id && isPlaying ? 'Pause' : 'Play'}
+                          {playingRecordingId === item.id && playerStatus.playing ? 'Pause' : 'Play'}
                         </Body>
                         <Icon
-                          name={playingRecordingId === item.id && isPlaying ? 'pause' : 'play'}
+                          name={playingRecordingId === item.id && playerStatus.playing ? 'pause' : 'play'}
                           size={12}
                           color="#FFFFFF"
                         />

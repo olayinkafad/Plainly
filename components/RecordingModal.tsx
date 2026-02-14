@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, ScrollView, Easing } from 'react-native'
-import { Audio } from 'expo-av'
+import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -53,7 +53,17 @@ export default function RecordingModal({
   const router = useRouter()
   const pathname = usePathname()
   const insets = useSafeAreaInsets()
-  const [recording, setRecording] = useState<Audio.Recording | null>(null)
+
+  // expo-audio recorder hook with mic interruption detection via status listener
+  const recorder = useAudioRecorder(
+    RecordingPresets.HIGH_QUALITY,
+    (status) => {
+      if (status.hasError && !userInitiatedPauseRef.current) {
+        handleMicInterruption()
+      }
+    }
+  )
+
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
   const [hasRecording, setHasRecording] = useState(false)
@@ -211,7 +221,7 @@ export default function RecordingModal({
 
   const requestPermissionsAndStart = async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync()
+      const { status } = await requestRecordingPermissionsAsync()
       if (status !== 'granted') {
         onClose()
         if (onPermissionDenied) {
@@ -219,9 +229,9 @@ export default function RecordingModal({
         }
         return
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       })
       if (!hasStartedRef.current) {
         hasStartedRef.current = true
@@ -234,26 +244,25 @@ export default function RecordingModal({
   }
 
   const startRecording = async (retryCount = 0) => {
-    if (hasStartedRef.current && recording) return
+    if (hasStartedRef.current && recorder.isRecording) return
 
     const MAX_RETRIES = 3
     const RETRY_DELAYS = [200, 400, 800]
 
     try {
-      if (recording) {
+      if (recorder.isRecording) {
         try {
-          await recording.stopAndUnloadAsync()
+          await recorder.stop()
         } catch (e) {
           // Ignore cleanup errors
         }
-        setRecording(null)
       }
 
       if (retryCount > 0) {
         try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            playsInSilentModeIOS: false,
+          await setAudioModeAsync({
+            allowsRecording: false,
+            playsInSilentMode: false,
           })
           await new Promise(resolve => setTimeout(resolve, 100))
         } catch (e) {
@@ -261,29 +270,18 @@ export default function RecordingModal({
         }
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       })
 
       if (retryCount > 0) {
         await new Promise(resolve => setTimeout(resolve, 50))
       }
 
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      )
+      await recorder.prepareToRecordAsync()
+      recorder.record()
 
-      // Attach recording status listener for mic interruption detection
-      newRecording.setOnRecordingStatusUpdate((status) => {
-        if (!status.isRecording && !userInitiatedPauseRef.current && status.isDoneRecording === false) {
-          // Mic was interrupted unexpectedly
-          handleMicInterruption()
-        }
-      })
-      newRecording.setProgressUpdateInterval(1000)
-
-      setRecording(newRecording)
       setRecordingState('recording')
       setHasRecording(true)
       setMicInterrupted(false)
@@ -296,7 +294,7 @@ export default function RecordingModal({
       console.error('Failed to start recording:', error)
 
       if (
-        errorMessage.includes('Only one Recording object can be prepared') &&
+        errorMessage.includes('Recording') &&
         retryCount < MAX_RETRIES
       ) {
         const retryDelay = RETRY_DELAYS[retryCount] || 2000
@@ -310,10 +308,9 @@ export default function RecordingModal({
   }
 
   const pauseRecording = async () => {
-    if (!recording) return
     try {
       userInitiatedPauseRef.current = true
-      await recording.pauseAsync()
+      recorder.pause()
       setRecordingState('paused')
       stopTimer()
       stopWaveformAnimation()
@@ -323,12 +320,11 @@ export default function RecordingModal({
   }
 
   const resumeRecording = async () => {
-    if (!recording) return
     try {
       userInitiatedPauseRef.current = false
       setMicInterrupted(false)
       setMicLost(false)
-      await recording.startAsync()
+      recorder.record()
       setRecordingState('recording')
       startTimer()
       startWaveformAnimation()
@@ -338,12 +334,9 @@ export default function RecordingModal({
   }
 
   const saveAndCloseRecording = async () => {
-    if (!recording) return
-
     try {
-      await recording.stopAndUnloadAsync()
-      const uri = recording.getURI()
-      setRecording(null)
+      await recorder.stop()
+      const uri = recorder.uri
 
       if (uri) {
         const newRecording: Recording = {
@@ -383,14 +376,13 @@ export default function RecordingModal({
   }
 
   const resetRecording = async () => {
-    if (recording) {
+    if (recorder.isRecording) {
       try {
-        await recording.stopAndUnloadAsync()
+        await recorder.stop()
       } catch (error) {
         // Ignore errors
       }
     }
-    setRecording(null)
     setRecordingState('idle')
     setDuration(0)
     setHasRecording(false)
@@ -408,9 +400,9 @@ export default function RecordingModal({
     stopWaveformAnimation()
     hasStartedRef.current = false
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: false,
       })
     } catch (error) {
       // Ignore

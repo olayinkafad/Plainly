@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { View, StyleSheet, Pressable } from 'react-native'
-import { Audio } from 'expo-av'
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio'
 import Icon from './Icon'
 import { Body } from './typography'
 import { themeLight } from '../constants/theme'
@@ -17,138 +17,77 @@ export interface AudioPlayerHandle {
 const SPEED_OPTIONS = [1, 1.5, 2, 0.5]
 
 const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function AudioPlayer({ audioUri, durationSec }, ref) {
-  const [sound, setSound] = useState<Audio.Sound | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [playbackPosition, setPlaybackPosition] = useState(0)
-  const [playbackDuration, setPlaybackDuration] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
-  const positionUpdateInterval = useRef<ReturnType<typeof setInterval> | null>(null)
   const scrubberWidthRef = useRef(200)
+  const prevUriRef = useRef(audioUri)
 
+  const player = useAudioPlayer({ uri: audioUri })
+  const status = useAudioPlayerStatus(player)
+
+  // Set audio mode on mount
   useEffect(() => {
-    loadAudio()
-    return () => {
-      if (sound) {
-        sound.unloadAsync().catch(console.error)
-      }
-      if (positionUpdateInterval.current) {
-        clearInterval(positionUpdateInterval.current)
-      }
+    setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true })
+  }, [])
+
+  // When audioUri changes, replace the source
+  useEffect(() => {
+    if (audioUri !== prevUriRef.current) {
+      prevUriRef.current = audioUri
+      player.replace({ uri: audioUri })
+      setPlaybackSpeed(1)
     }
-  }, [audioUri])
+  }, [audioUri, player])
 
-  const loadAudio = async () => {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      })
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: false }
-      )
-
-      const status = await newSound.getStatusAsync()
-      if (status.isLoaded) {
-        setPlaybackDuration(status.durationMillis || durationSec * 1000)
-      }
-
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded) {
-          setPlaybackPosition(status.positionMillis || 0)
-          if (status.didJustFinish) {
-            setIsPlaying(false)
-            setPlaybackPosition(0)
-            newSound.setPositionAsync(0).catch(console.error)
-            if (positionUpdateInterval.current) {
-              clearInterval(positionUpdateInterval.current)
-              positionUpdateInterval.current = null
-            }
-          }
-        }
-      })
-
-      setSound(newSound)
-    } catch (error) {
-      console.error('Failed to load audio:', error)
+  // Handle didJustFinish — expo-audio does NOT auto-reset position
+  useEffect(() => {
+    if (status.didJustFinish) {
+      player.seekTo(0)
     }
-  }
+  }, [status.didJustFinish, player])
+
+  // Derive ms values from status (seconds → ms for display)
+  const positionMs = (status.currentTime ?? 0) * 1000
+  const durationMs = (status.duration > 0 ? status.duration : durationSec) * 1000
 
   useImperativeHandle(ref, () => ({
     seekTo: async (positionMs: number) => {
-      if (!sound) return
       try {
-        await sound.setPositionAsync(Math.max(0, Math.min(positionMs, playbackDuration)))
-        setPlaybackPosition(Math.max(0, Math.min(positionMs, playbackDuration)))
+        const maxSec = status.duration > 0 ? status.duration : durationSec
+        const seconds = Math.max(0, Math.min(positionMs / 1000, maxSec))
+        player.seekTo(seconds)
       } catch (error) {
         console.error('Failed to seek:', error)
       }
     },
-  }), [sound, playbackDuration])
+  }), [player, status.duration, durationSec])
 
-  const togglePlayback = async () => {
-    if (!sound) return
-
-    try {
-      if (isPlaying) {
-        await sound.pauseAsync()
-        setIsPlaying(false)
-        if (positionUpdateInterval.current) {
-          clearInterval(positionUpdateInterval.current)
-          positionUpdateInterval.current = null
-        }
-      } else {
-        const status = await sound.getStatusAsync()
-        if (status.isLoaded) {
-          const currentPosition = status.positionMillis || 0
-          const duration = status.durationMillis || playbackDuration
-          if (currentPosition >= duration - 100) {
-            await sound.setPositionAsync(0)
-            setPlaybackPosition(0)
-          }
-        }
-        await sound.playAsync()
-        setIsPlaying(true)
-        if (!positionUpdateInterval.current) {
-          positionUpdateInterval.current = setInterval(async () => {
-            if (sound) {
-              const currentStatus = await sound.getStatusAsync()
-              if (currentStatus.isLoaded) {
-                setPlaybackPosition(currentStatus.positionMillis || 0)
-              }
-            }
-          }, 100)
-        }
+  const togglePlayback = () => {
+    if (status.playing) {
+      player.pause()
+    } else {
+      // If at end, reset to start before playing
+      const currentSec = status.currentTime ?? 0
+      const totalSec = status.duration > 0 ? status.duration : durationSec
+      if (totalSec > 0 && currentSec >= totalSec - 0.1) {
+        player.seekTo(0)
       }
-    } catch (error) {
-      console.error('Failed to toggle playback:', error)
+      player.play()
     }
   }
 
-  const handleScrubberPress = async (event: any) => {
-    if (!sound) return
-    try {
-      const { locationX } = event.nativeEvent
-      const percentage = locationX / scrubberWidthRef.current
-      const newPos = percentage * playbackDuration
-      await sound.setPositionAsync(Math.max(0, Math.min(newPos, playbackDuration)))
-      setPlaybackPosition(Math.max(0, Math.min(newPos, playbackDuration)))
-    } catch (error) {
-      console.error('Failed to scrub:', error)
-    }
+  const handleScrubberPress = (event: any) => {
+    const { locationX } = event.nativeEvent
+    const pct = locationX / scrubberWidthRef.current
+    const totalSec = status.duration > 0 ? status.duration : durationSec
+    const seekSec = Math.max(0, Math.min(pct * totalSec, totalSec))
+    player.seekTo(seekSec)
   }
 
-  const cycleSpeed = async () => {
-    if (!sound) return
+  const cycleSpeed = () => {
     const currentIndex = SPEED_OPTIONS.indexOf(playbackSpeed)
     const nextSpeed = SPEED_OPTIONS[(currentIndex + 1) % SPEED_OPTIONS.length]
-    try {
-      await sound.setRateAsync(nextSpeed, true)
-      setPlaybackSpeed(nextSpeed)
-    } catch (error) {
-      console.error('Failed to change speed:', error)
-    }
+    player.setPlaybackRate(nextSpeed)
+    setPlaybackSpeed(nextSpeed)
   }
 
   const formatTime = (millis: number): string => {
@@ -167,9 +106,9 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function Aud
   return (
     <View style={styles.container}>
       <Pressable style={styles.playButton} onPress={togglePlayback}>
-        <Icon name={isPlaying ? 'pause' : 'play'} size={16} color="#FFFFFF" />
+        <Icon name={status.playing ? 'pause' : 'play'} size={16} color="#FFFFFF" />
       </Pressable>
-      <Body style={styles.timeText}>{formatTime(playbackPosition)}</Body>
+      <Body style={styles.timeText}>{formatTime(positionMs)}</Body>
       <Pressable
         style={styles.progressTrack}
         onPress={handleScrubberPress}
@@ -178,11 +117,11 @@ const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function Aud
         <View
           style={[
             styles.progressFill,
-            { width: `${playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0}%` },
+            { width: `${durationMs > 0 ? (positionMs / durationMs) * 100 : 0}%` },
           ]}
         />
       </Pressable>
-      <Body style={styles.timeText}>{formatTime(playbackDuration)}</Body>
+      <Body style={styles.timeText}>{formatTime(durationMs)}</Body>
       <Pressable style={styles.speedPill} onPress={cycleSpeed}>
         <Body style={styles.speedText}>{formatSpeedLabel(playbackSpeed)}</Body>
       </Pressable>

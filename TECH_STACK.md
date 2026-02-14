@@ -4,7 +4,7 @@
 - Language: TypeScript
 - Navigation: expo-router
 - State: React Context (MVP)
-- Audio Recording: expo-av
+- Audio Recording: expo-audio
 - Styling: StyleSheet or NativeWind (Tailwind for RN)
 - Platform focus: iOS-first, Android supported
 
