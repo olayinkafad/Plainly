@@ -1,29 +1,44 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, FlatList, Dimensions, NativeScrollEvent, NativeSyntheticEvent, Animated, AccessibilityInfo, Pressable } from 'react-native'
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  AccessibilityInfo,
+} from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Title, Body } from '../components/typography'
-import Icon from '../components/Icon'
+import Button from '../components/Button'
+import OnboardingWaveform from '../components/OnboardingWaveform'
+import OnboardingResultPreview from '../components/OnboardingResultPreview'
+import OnboardingUseCaseCards from '../components/OnboardingUseCaseCards'
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window')
 
 interface Slide {
   title: string
   body: string
+  illustration: 'waveform' | 'resultPreview' | 'useCaseCards'
 }
 
 const slides: Slide[] = [
   {
-    title: 'Voice notes shouldn’t stay messy.',
-    body: 'Plainly helps you make sense of what you say — instantly.',
+    title: "Just talk. We'll handle the rest.",
+    body: 'Record your thoughts and get back clear, structured notes.',
+    illustration: 'waveform',
   },
   {
-    title: 'Not just recorded. Structured.',
-    body: 'Get summaries, action items, and transcripts from every recording.',
+    title: 'Talk messy. Get clean notes.',
+    body: "Plainly transcribes what you said and pulls out what matters.",
+    illustration: 'resultPreview',
   },
   {
-    title: 'Talk it out. We’ll organize it.',
-    body: 'Ideas, meetings, reflections, to-dos — all in one place.',
+    title: 'For meetings, ideas, and everything in between.',
+    body: "Whenever you'd rather talk than type.",
+    illustration: 'useCaseCards',
   },
 ]
 
@@ -31,209 +46,61 @@ export default function Onboarding() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [isUserInteracting, setIsUserInteracting] = useState(false)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
   const flatListRef = useRef<FlatList>(null)
-  const autoPlayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const illustrationFloatAnim = useRef(new Animated.Value(0)).current
-  
-  // Pulse ring animations
-  const ring1Anim = useRef(new Animated.Value(0)).current
-  const ring2Anim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setPrefersReducedMotion)
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setPrefersReducedMotion)
+    const subscription = AccessibilityInfo.addEventListener(
+      'reduceMotionChanged',
+      setPrefersReducedMotion
+    )
     return () => subscription.remove()
   }, [])
 
-  useEffect(() => {
-    if (prefersReducedMotion) return
-
-    const floatAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(illustrationFloatAnim, {
-          toValue: 1,
-          duration: 7000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(illustrationFloatAnim, {
-          toValue: 0,
-          duration: 7000,
-          useNativeDriver: true,
-        }),
-      ])
-    )
-    floatAnimation.start()
-    return () => floatAnimation.stop()
-  }, [prefersReducedMotion])
-
-  // Pulse ring animation
-  useEffect(() => {
-    if (prefersReducedMotion) {
-      ring1Anim.setValue(0)
-      ring2Anim.setValue(0)
-      return
-    }
-
-    const createRingAnimation = (animValue: Animated.Value, delay: number) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(animValue, {
-            toValue: 1,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(animValue, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ])
-      )
-    }
-
-    // Reset values before starting
-    ring1Anim.setValue(0)
-    ring2Anim.setValue(0)
-
-    const ring1Animation = createRingAnimation(ring1Anim, 0)
-    const ring2Animation = createRingAnimation(ring2Anim, 700)
-
-    ring1Animation.start()
-    ring2Animation.start()
-
-    return () => {
-      ring1Animation.stop()
-      ring2Animation.stop()
-    }
-  }, [prefersReducedMotion, ring1Anim, ring2Anim])
-
-  const ring1Scale = ring1Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.8],
-  })
-
-  const ring1Opacity = ring1Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.25, 0],
-  })
-
-  const ring2Scale = ring2Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.8],
-  })
-
-  const ring2Opacity = ring2Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.25, 0],
-  })
-
-  const illustrationTranslateY = illustrationFloatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-4, 4],
-  })
-
-  // Auto-play: advance every 3.5 seconds
-  useEffect(() => {
-    if (isUserInteracting) {
-      return // Pause auto-play while user is interacting
-    }
-
-    autoPlayTimerRef.current = setInterval(() => {
-      setCurrentIndex((prevIndex) => {
-        const nextIndex = prevIndex + 1
-        // Loop back to first slide after last
-        if (nextIndex >= slides.length) {
-          flatListRef.current?.scrollToOffset({ offset: 0, animated: true })
-          return 0
-        }
-        // Use scrollToOffset for exact positioning
-        flatListRef.current?.scrollToOffset({
-          offset: nextIndex * SCREEN_WIDTH,
-          animated: true,
-        })
-        return nextIndex
-      })
-    }, 3500)
-
-    return () => {
-      if (autoPlayTimerRef.current) {
-        clearInterval(autoPlayTimerRef.current)
-      }
-    }
-  }, [isUserInteracting])
-
-  // Handle manual swipe - update index from scroll position
-  const handleMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+  const handleMomentumScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
     const offsetX = event.nativeEvent.contentOffset.x
     const index = Math.round(offsetX / SCREEN_WIDTH)
-    
     if (index >= 0 && index < slides.length && index !== currentIndex) {
       setCurrentIndex(index)
     }
   }
 
-  const handleScrollBeginDrag = () => {
-    setIsUserInteracting(true)
-    // Clear any existing resume timer
-    if (resumeTimerRef.current) {
-      clearTimeout(resumeTimerRef.current)
+  const renderIllustration = (item: Slide, slideIndex: number) => {
+    if (item.illustration === 'waveform') {
+      return (
+        <View style={styles.illustrationWrapper}>
+          <OnboardingWaveform />
+        </View>
+      )
     }
-    // Clear auto-play timer
-    if (autoPlayTimerRef.current) {
-      clearInterval(autoPlayTimerRef.current)
-      autoPlayTimerRef.current = null
+    if (item.illustration === 'resultPreview') {
+      return (
+        <View style={styles.illustrationWrapper}>
+          <OnboardingResultPreview isFocused={currentIndex === 1} />
+        </View>
+      )
     }
+    return (
+      <View style={styles.illustrationWrapper}>
+        <OnboardingUseCaseCards />
+      </View>
+    )
   }
 
-  const handleScrollEndDrag = () => {
-    // Resume auto-play 2 seconds after user finishes swiping
-    if (resumeTimerRef.current) {
-      clearTimeout(resumeTimerRef.current)
-    }
-    resumeTimerRef.current = setTimeout(() => {
-      setIsUserInteracting(false)
-    }, 2000)
-  }
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (autoPlayTimerRef.current) {
-        clearInterval(autoPlayTimerRef.current)
-      }
-      if (resumeTimerRef.current) {
-        clearTimeout(resumeTimerRef.current)
-      }
-    }
-  }, [])
-
-  const renderSlide = ({ item }: { item: Slide }) => (
+  const renderSlide = ({ item, index }: { item: Slide; index: number }) => (
     <View style={styles.slideContainer}>
       <View style={styles.slide}>
-        {/* Zone A: Top - Title and Subtext */}
-        <View style={styles.topZone}>
-          <View style={styles.textContainer}>
-            <Title style={styles.title}>{item.title}</Title>
-            <Body style={styles.body}>{item.body}</Body>
-          </View>
+        {/* 1. Illustration area – top, dominant (~2/3) */}
+        <View style={styles.illustrationArea}>
+          {renderIllustration(item, index)}
         </View>
-
-        {/* Zone B: Middle - Illustration area */}
-        <View style={styles.middleZone}>
-          <Animated.View
-            style={[
-              styles.illustrationContainer,
-              prefersReducedMotion ? {} : { transform: [{ translateY: illustrationTranslateY }] },
-            ]}
-          >
-            <View style={styles.illustrationPlaceholder}>
-              <View style={styles.illustrationIcon} />
-            </View>
-          </Animated.View>
+        {/* 2. Heading + subtext – below illustration, centered */}
+        <View style={styles.textSection}>
+          <Title style={styles.title}>{item.title}</Title>
+          <Body style={styles.body}>{item.body}</Body>
         </View>
       </View>
     </View>
@@ -242,36 +109,20 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
-        {/* Progress indicators - always visible at top */}
-        <View style={styles.progressContainer}>
-          {slides.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.progressBar,
-                index === currentIndex && styles.progressActive,
-              ]}
-            />
-          ))}
-        </View>
-
-        {/* Carousel */}
         <FlatList
           ref={flatListRef}
           data={slides}
           renderItem={renderSlide}
           keyExtractor={(_, index) => `slide-${index}`}
           horizontal
-          pagingEnabled={true}
+          pagingEnabled
           showsHorizontalScrollIndicator={false}
           bounces={false}
           decelerationRate="fast"
           snapToInterval={SCREEN_WIDTH}
           snapToAlignment="start"
-          disableIntervalMomentum={true}
+          disableIntervalMomentum
           onMomentumScrollEnd={handleMomentumScrollEnd}
-          onScrollBeginDrag={handleScrollBeginDrag}
-          onScrollEndDrag={handleScrollEndDrag}
           scrollEventThrottle={16}
           getItemLayout={(_, index) => ({
             length: SCREEN_WIDTH,
@@ -281,50 +132,28 @@ export default function Onboarding() {
           contentContainerStyle={styles.flatListContent}
         />
 
-        {/* Zone C: Bottom - Animated CTA fixed to bottom */}
+        {/* Pagination dots – below carousel, centered */}
+        <View style={styles.progressContainer}>
+          {slides.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.progressDot,
+                index === currentIndex && styles.progressDotActive,
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Get started – bottom, app CTA style */}
         <View style={[styles.bottomZone, { paddingBottom: insets.bottom + 16 }]}>
-          <Pressable
-            style={styles.ctaContainer}
-            onPress={() => {
-              router.push('/home?startRecording=true')
-            }}
-            accessibilityLabel="Record your first voice note"
-            accessibilityRole="button"
+          <Button
+            variant="primary"
+            fullWidth
+            onPress={() => router.replace('/home')}
           >
-            {/* Label card - at the top */}
-            <View style={styles.labelCard}>
-              <Body style={styles.labelText}>Record your first voice note</Body>
-            </View>
-            {/* Pulse rings */}
-            <View style={styles.pulseContainer}>
-              {!prefersReducedMotion && (
-                <>
-                  <Animated.View
-                    style={[
-                      styles.pulseRing,
-                      {
-                        transform: [{ scale: ring1Scale }],
-                        opacity: ring1Opacity,
-                      },
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      styles.pulseRing,
-                      {
-                        transform: [{ scale: ring2Scale }],
-                        opacity: ring2Opacity,
-                      },
-                    ]}
-                  />
-                </>
-              )}
-              {/* Solid circle */}
-              <View style={styles.solidCircle}>
-                <Icon name="microphone" size={28} color="#FFFFFF" />
-              </View>
-            </View>
-          </Pressable>
+            Get started
+          </Button>
         </View>
       </View>
     </SafeAreaView>
@@ -342,136 +171,75 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  // Progress indicators
-  progressContainer: {
-    flexDirection: 'row',
-    gap: 8, // --space-2
-    marginBottom: 32, // --space-8
-    paddingTop: 24, // --space-6
-    paddingHorizontal: 16, // --space-4
-  },
-  progressBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E5E7EB', // --color-border-default
-  },
-  progressActive: {
-    backgroundColor: '#2563EB', // --color-accent-primary
-  },
-  // FlatList container
   flatListContent: {
-    // No horizontal padding - slides handle their own padding
+    flexGrow: 1,
   },
-  // Slide container - MUST be exactly SCREEN_WIDTH
   slideContainer: {
     width: SCREEN_WIDTH,
+    flex: 1,
   },
-  // Slide content with padding
   slide: {
     flex: 1,
-    paddingHorizontal: 24, // Consistent horizontal padding inside slide
+    paddingHorizontal: 20,
   },
-  // Zone A: Top
-  topZone: {
-    // Title and subtext near top, left-aligned
+  /* Illustration – balanced height, content vertically centered, reduced padding */
+  illustrationArea: {
+    width: '100%',
+    height: Math.round(SCREEN_HEIGHT * 0.36),
+    backgroundColor: '#EEF3FF',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  textContainer: {
-    // Left-aligned, no vertical centering
+  illustrationWrapper: {
+    width: '100%',
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /* Text – below illustration, centered */
+  textSection: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    marginBottom: 12, // --space-3
-    color: '#111827', // --color-text-primary
+    textAlign: 'center',
+    marginBottom: 8,
+    color: '#111827',
   },
   body: {
-    color: '#6B7280', // --color-text-secondary
+    textAlign: 'center',
+    color: '#6B7280',
   },
-  // Zone B: Middle
-  middleZone: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 200,
-    paddingVertical: 40,
-  },
-  illustrationContainer: {
-    width: '100%',
-    maxWidth: 300,
-    aspectRatio: 1,
+  /* Pagination – below carousel */
+  progressContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
   },
-  illustrationPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
-    borderRadius: 10, // --radius-md
-    borderWidth: 1,
-    borderColor: '#F1F5F9', // --color-border-subtle
-    alignItems: 'center',
-    justifyContent: 'center',
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#E5E7EB',
   },
-  illustrationIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#E5E7EB', // --color-border-default
+  progressDotActive: {
+    width: 24,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2563EB',
   },
-  // Zone C: Bottom
   bottomZone: {
-    paddingTop: 24, // --space-6
-    paddingHorizontal: 16, // --space-4
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
     width: '100%',
-    alignItems: 'center',
-  },
-  ctaContainer: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16, // --space-4
-  },
-  pulseContainer: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#2563EB', // --color-accent-primary
-  },
-  solidCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#2563EB', // --color-accent-primary
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  labelCard: {
-    backgroundColor: '#F9FAFB', // --color-bg-secondary
-    paddingHorizontal: 16, // --space-4
-    paddingVertical: 12, // --space-3
-    borderRadius: 10, // --radius-md
-    borderWidth: 1,
-    borderColor: '#E5E7EB', // --color-border-default
-    shadowColor: '#000000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  labelText: {
-    color: '#111827', // --color-text-primary
-    fontSize: 14, // --font-size-sm
-    fontWeight: '500', // --font-weight-medium
   },
 })

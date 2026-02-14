@@ -41,6 +41,8 @@ const arrowRightIcon = require('../assets/icons/arrow-right.svg')
 const dotsThreeVerticalIcon = require('../assets/icons/dots-three-vertical.svg')
 const fileTextIcon = require('../assets/icons/file-text.svg')
 const sparkleIcon = require('../assets/icons/sparkle.svg')
+const usersIcon = require('../assets/icons/users.svg')
+const plantIcon = require('../assets/icons/plant.svg')
 
 // Helper to extract React component from require result
 const extractComponent = (module: any): React.ComponentType<SvgProps> | null => {
@@ -112,6 +114,12 @@ const iconRegistry: IconRegistry = {
   },
   'sparkle': {
     regular: extractComponent(sparkleIcon) || sparkleIcon.default || sparkleIcon,
+  },
+  'users': {
+    regular: extractComponent(usersIcon) || usersIcon.default || usersIcon,
+  },
+  'plant': {
+    regular: extractComponent(plantIcon) || plantIcon.default || plantIcon,
   },
 }
 
