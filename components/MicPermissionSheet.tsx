@@ -133,23 +133,19 @@ const styles = StyleSheet.create({
     paddingTop: 32, // --space-8
   },
   closeButton: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
+    alignSelf: 'flex-end',
     padding: 4,
-    zIndex: 1,
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
   },
   heading: {
     fontSize: 22,
     fontFamily: 'PlayfairDisplay_700Bold',
     color: themeLight.textPrimary,
     textAlign: 'center',
-    paddingRight: 32,
-    paddingLeft: 32,
   },
   subtext: {
     fontSize: 15,

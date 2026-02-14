@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, Alert, ScrollView } from 'react-native'
+import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, ScrollView } from 'react-native'
 import { Audio } from 'expo-av'
+import { BlurView } from 'expo-blur'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, usePathname } from 'expo-router'
 import Icon from './Icon'
-import { Title, Body, Meta } from './typography'
-import Button from './Button'
+import { Title, Body } from './typography'
 import { Recording, recordingsStore } from '../store/recordings'
 import { themeLight } from '../constants/theme'
 
@@ -18,6 +19,15 @@ interface RecordingModalProps {
 
 type RecordingState = 'idle' | 'recording' | 'paused'
 
+const WAVEFORM_BAR_COUNT = 25
+
+// Pre-computed static bar heights for visual variety (taller in center, shorter at edges)
+const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
+  const center = WAVEFORM_BAR_COUNT / 2
+  const distance = Math.abs(i - center) / center
+  return 16 + 28 * (1 - distance * 0.7) + Math.random() * 8
+})
+
 export default function RecordingModal({
   isOpen,
   onClose,
@@ -29,14 +39,17 @@ export default function RecordingModal({
   const insets = useSafeAreaInsets()
   const [recording, setRecording] = useState<Audio.Recording | null>(null)
   const [recordingState, setRecordingState] = useState<RecordingState>('idle')
-  const [duration, setDuration] = useState(0) // in seconds
+  const [duration, setDuration] = useState(0)
   const [hasRecording, setHasRecording] = useState(false)
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const slideAnim = useRef(new Animated.Value(0)).current
   const hasStartedRef = useRef(false)
   const waveformAnimations = useRef(
-    Array.from({ length: 7 }, () => new Animated.Value(0.3))
+    Array.from({ length: WAVEFORM_BAR_COUNT }, () => new Animated.Value(0.3))
   ).current
+
+  const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 
   useEffect(() => {
     if (isOpen) {
@@ -47,7 +60,6 @@ export default function RecordingModal({
         friction: 11,
       }).start()
       hasStartedRef.current = false
-      // Start immediately - cleanup happens in parallel
       resetRecording()
       requestPermissionsAndStart()
     } else {
@@ -58,6 +70,7 @@ export default function RecordingModal({
       }).start()
       resetRecording()
       hasStartedRef.current = false
+      setShowDiscardConfirm(false)
     }
 
     return () => {
@@ -65,17 +78,17 @@ export default function RecordingModal({
     }
   }, [isOpen, slideAnim])
 
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SCREEN_HEIGHT, 0],
+  })
+
+  // ── Permission & Recording Lifecycle ──
+
   const requestPermissionsAndStart = async () => {
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:65',message:'requestPermissionsAndStart called',data:{hasStarted:hasStartedRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       const { status } = await Audio.requestPermissionsAsync()
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:68',message:'Permission status',data:{status,isGranted:status === 'granted'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       if (status !== 'granted') {
-        // Close modal if permission denied - system will handle the permission UI
         onClose()
         return
       }
@@ -83,58 +96,23 @@ export default function RecordingModal({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       })
-      // Auto-start recording after permissions granted
-      if (!hasStartedRef.current) {
-        hasStartedRef.current = true
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:80',message:'Calling startRecording',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        await startRecording()
-      }
-    } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:85',message:'Permission error',data:{error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
-      console.error('Permission error:', error)
-      onClose()
-    }
-  }
-
-  const requestPermissions = async () => {
-    try {
-      const { status } = await Audio.requestPermissionsAsync()
-      if (status !== 'granted') {
-        onClose()
-        return false
-      }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      })
-      // Auto-start after retry
       if (!hasStartedRef.current) {
         hasStartedRef.current = true
         await startRecording()
       }
-      return true
     } catch (error) {
       console.error('Permission error:', error)
       onClose()
-      return false
     }
   }
 
   const startRecording = async (retryCount = 0) => {
-    // Guard against duplicate starts
-    if (hasStartedRef.current && recording) {
-      return
-    }
+    if (hasStartedRef.current && recording) return
 
     const MAX_RETRIES = 3
-    const RETRY_DELAYS = [200, 400, 800] // Progressive delays in ms (minimal)
+    const RETRY_DELAYS = [200, 400, 800]
 
     try {
-      // Clean up any existing recording first
       if (recording) {
         try {
           await recording.stopAndUnloadAsync()
@@ -144,28 +122,23 @@ export default function RecordingModal({
         setRecording(null)
       }
 
-      // Reset audio mode to clear any prepared recordings (only if needed)
-      // Skip reset on first attempt to start immediately
       if (retryCount > 0) {
         try {
           await Audio.setAudioModeAsync({
             allowsRecordingIOS: false,
             playsInSilentModeIOS: false,
           })
-          // Minimal wait only on retry
           await new Promise(resolve => setTimeout(resolve, 100))
         } catch (e) {
           // Ignore
         }
       }
 
-      // Set audio mode for recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       })
 
-      // Minimal delay before creating new recording (only on retry)
       if (retryCount > 0) {
         await new Promise(resolve => setTimeout(resolve, 50))
       }
@@ -177,14 +150,13 @@ export default function RecordingModal({
       setRecording(newRecording)
       setRecordingState('recording')
       setHasRecording(true)
-      setDuration(0) // Reset timer
+      setDuration(0)
       startTimer()
       startWaveformAnimation()
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       console.error('Failed to start recording:', error)
 
-      // If it's the "Only one Recording" error and we haven't exceeded retries, retry
       if (
         errorMessage.includes('Only one Recording object can be prepared') &&
         retryCount < MAX_RETRIES
@@ -195,7 +167,6 @@ export default function RecordingModal({
         return startRecording(retryCount + 1)
       }
 
-      // If we've exhausted retries or it's a different error, reset the flag
       hasStartedRef.current = false
     }
   }
@@ -230,13 +201,9 @@ export default function RecordingModal({
     try {
       await recording.stopAndUnloadAsync()
       const uri = recording.getURI()
-      
-      // Clear recording reference before resetting to avoid double-unload
-      const savedRecording = recording
       setRecording(null)
-      
+
       if (uri) {
-        // Create recording object
         const newRecording: Recording = {
           id: Date.now().toString(),
           title: 'Recording',
@@ -247,21 +214,17 @@ export default function RecordingModal({
           lastViewedFormat: 'summary',
         }
 
-        // Save without showing toast (format selection will open instead)
         await onSave(newRecording, false)
-        
-        // Reset state (recording is already null, so won't try to unload again)
+
         setRecordingState('idle')
         setDuration(0)
         setHasRecording(false)
         stopTimer()
         stopWaveformAnimation()
         hasStartedRef.current = false
-        
-        // Close modal first
+
         onClose()
-        
-        // Then open format selection after modal closes
+
         setTimeout(() => {
           onFormatSelect(newRecording.id)
         }, 300)
@@ -290,7 +253,6 @@ export default function RecordingModal({
     stopTimer()
     stopWaveformAnimation()
     hasStartedRef.current = false
-    // Reset audio mode
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -300,6 +262,8 @@ export default function RecordingModal({
       // Ignore
     }
   }
+
+  // ── Timer ──
 
   const startTimer = () => {
     if (timerRef.current) {
@@ -317,39 +281,6 @@ export default function RecordingModal({
     }
   }
 
-  const startWaveformAnimation = () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:245',message:'startWaveformAnimation called',data:{waveformAnimationsLength:waveformAnimations.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-    const animations = waveformAnimations.map((anim, index) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, {
-            toValue: 0.3 + Math.random() * 0.7, // Random height between 0.3 and 1.0
-            duration: 200 + Math.random() * 300, // Random duration between 200-500ms
-            useNativeDriver: false, // Can't use native driver for height
-          }),
-          Animated.timing(anim, {
-            toValue: 0.3 + Math.random() * 0.7,
-            duration: 200 + Math.random() * 300,
-            useNativeDriver: false,
-          }),
-        ])
-      )
-    })
-    Animated.parallel(animations).start()
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:262',message:'Waveform animations started',data:{animationsCount:animations.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-  }
-
-  const stopWaveformAnimation = () => {
-    waveformAnimations.forEach((anim) => {
-      anim.stopAnimation()
-      anim.setValue(0.3)
-    })
-  }
-
   const formatTime = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
@@ -361,51 +292,56 @@ export default function RecordingModal({
     return `${minutes}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleCancel = async () => {
-    if (hasRecording && (recordingState === 'recording' || recordingState === 'paused')) {
-      Alert.alert(
-        'Would you like to save this recording?',
-        '',
-        [
-          {
-            text: 'Discard',
-            style: 'destructive',
-            onPress: async () => {
-              resetRecording()
-              onClose()
-              // Check if user has any recordings - if not, navigate to home (first-time user)
-              // Only navigate if we're not already on the home screen
-              // Wait for modal close animation to complete (200ms) before navigating
-              setTimeout(async () => {
-                const allRecordings = await recordingsStore.getAll()
-                if (allRecordings.length === 0 && pathname !== '/home') {
-                  router.replace('/home')
-                }
-              }, 250)
-            },
-          },
-          {
-            text: 'Save',
-            style: 'default',
-            onPress: async () => {
-              await saveAndCloseRecording()
-            },
-          },
-        ]
+  // ── Waveform (25 bars, opacity-animated) ──
+
+  const startWaveformAnimation = () => {
+    const animations = waveformAnimations.map((anim) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, {
+            toValue: 0.3 + Math.random() * 0.7,
+            duration: 200 + Math.random() * 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0.3 + Math.random() * 0.7,
+            duration: 200 + Math.random() * 300,
+            useNativeDriver: true,
+          }),
+        ])
       )
+    })
+    Animated.parallel(animations).start()
+  }
+
+  const stopWaveformAnimation = () => {
+    waveformAnimations.forEach((anim) => {
+      anim.stopAnimation()
+      anim.setValue(0.3)
+    })
+  }
+
+  // ── Discard ──
+
+  const handleClose = () => {
+    if (hasRecording && (recordingState === 'recording' || recordingState === 'paused')) {
+      setShowDiscardConfirm(true)
     } else {
       onClose()
     }
   }
 
-  const { height: SCREEN_HEIGHT } = Dimensions.get('window')
-  const SHEET_HEIGHT = SCREEN_HEIGHT * 0.95 // 95% of screen height
-  const TOP_OFFSET = insets.top + 8 // Just safe area + small gap
-
-  const translateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [SCREEN_HEIGHT, TOP_OFFSET],
-  })
+  const handleConfirmDiscard = async () => {
+    setShowDiscardConfirm(false)
+    await resetRecording()
+    onClose()
+    setTimeout(async () => {
+      const allRecordings = await recordingsStore.getAll()
+      if (allRecordings.length === 0 && pathname !== '/home') {
+        router.replace('/home')
+      }
+    }, 250)
+  }
 
   if (!isOpen) return null
 
@@ -414,307 +350,371 @@ export default function RecordingModal({
       visible={isOpen}
       transparent
       animationType="fade"
-      onRequestClose={handleCancel}
+      onRequestClose={handleClose}
     >
-      <Pressable style={styles.overlay} onPress={handleCancel}>
+      <View style={styles.backdrop}>
+        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.overlay} />
+
         <Animated.View
           style={[
-            styles.sheet,
-            {
-              transform: [{ translateY }],
-              height: SHEET_HEIGHT,
-            },
+            styles.fullScreenSheet,
+            { transform: [{ translateY }] },
           ]}
         >
-          <Pressable style={styles.sheetContent}>
-            {/* Grab Handle */}
-            <View style={styles.grabHandle} />
+          {/* ── Top: Live Transcript Section ── */}
+          <View style={[styles.transcriptSection, { paddingTop: insets.top }]}>
+            {/* Close button */}
+            <Pressable
+              onPress={handleClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Close recording"
+              accessibilityRole="button"
+            >
+              <Icon name="x" size={24} color={themeLight.textTertiary} />
+            </Pressable>
 
-            {/* Header */}
-            <View style={[styles.header, { paddingTop: 8 }]}>
-              <Pressable onPress={handleCancel} style={styles.closeButton}>
-                <Icon name="x" size={24} color={themeLight.textSecondary} />
-              </Pressable>
-            </View>
+            <ScrollView
+              style={styles.transcriptScroll}
+              contentContainerStyle={styles.transcriptScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.transcriptCard}>
+                <Body style={styles.cardHeading}>Here's what you said so far</Body>
+                <View style={styles.cardDivider} />
+                <Body style={styles.placeholderText}>
+                  Your transcript will appear here once we process your recording.
+                </Body>
+              </View>
+            </ScrollView>
 
+            {/* Gradient fade at bottom of scroll area */}
+            <LinearGradient
+              colors={['rgba(253, 252, 251, 0)', themeLight.bgPrimary]}
+              style={styles.scrollGradient}
+              pointerEvents="none"
+            />
+          </View>
+
+          {/* ── Bottom: Recording Controls Section ── */}
+          <View style={[styles.controlsSection, { paddingBottom: insets.bottom + 28 }]}>
             {/* Timer */}
-            <View style={styles.timerContainer}>
-              {(() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/833c2d22-556f-4cb3-8e85-89df33b7ba86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'components/RecordingModal.tsx:445',message:'Timer render',data:{duration,recordingState,hasRecording},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
-                // #endregion
-                return null
-              })()}
-              <Title style={styles.timer}>{formatTime(duration)}</Title>
-              {recordingState === 'recording' && (
-                <>
-                  <Title style={styles.primaryText}>I'm listening…</Title>
-                  <Body style={styles.secondaryText}>Say it naturally. You don't need to be polished.</Body>
-                </>
-              )}
-              {recordingState === 'paused' && (
-                <Meta style={styles.pausedLabel}>PAUSED</Meta>
-              )}
-            </View>
+            <Body style={styles.timer}>{formatTime(duration)}</Body>
 
-            {/* Waveform animation */}
+            {/* Status text */}
+            {recordingState === 'recording' && (
+              <>
+                <Title style={styles.listeningText}>I'm listening...</Title>
+                <Body style={styles.subtitleText}>Speak naturally. No need to rehearse.</Body>
+              </>
+            )}
+            {recordingState === 'paused' && (
+              <>
+                <Title style={styles.listeningText}>Recording paused</Title>
+                <Body style={styles.subtitleText}>Tap resume to continue.</Body>
+              </>
+            )}
+
+            {/* Waveform */}
             {(recordingState === 'recording' || recordingState === 'paused') && (
               <View style={styles.waveformContainer}>
-                {waveformAnimations.map((anim, index) => {
-                  const height = anim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [20, 60], // Height in pixels: 20px to 60px
-                  })
-                  return (
-                    <Animated.View
-                      key={index}
-                      style={[
-                        styles.waveformBar,
-                        {
-                          height: height,
-                        },
-                      ]}
-                    />
-                  )
-                })}
+                {waveformAnimations.map((anim, index) => (
+                  <Animated.View
+                    key={index}
+                    style={[
+                      styles.waveformBar,
+                      {
+                        height: BAR_HEIGHTS[index],
+                        opacity: anim,
+                      },
+                    ]}
+                  />
+                ))}
               </View>
             )}
 
-            {/* Controls */}
-            <View style={styles.controls}>
-              {/* Left: Cancel */}
-              <View style={styles.controlItem}>
-                <Pressable
-                  style={[styles.controlButton, styles.cancelButton]}
-                  onPress={handleCancel}
-                >
-                  <Icon name="x" size={24} color={themeLight.textSecondary} />
-                </Pressable>
-                <Body style={styles.controlLabel}>Cancel</Body>
-              </View>
+            {/* Buttons */}
+            <View style={styles.buttonRow}>
+              {/* Pause / Resume */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.pauseButton,
+                  pressed && styles.pauseButtonPressed,
+                ]}
+                onPress={recordingState === 'recording' ? pauseRecording : resumeRecording}
+                disabled={!hasRecording}
+              >
+                <Body style={styles.pauseButtonText}>
+                  {recordingState === 'recording' ? 'Pause' : 'Resume'}
+                </Body>
+                <Icon
+                  name={recordingState === 'recording' ? 'pause' : 'play'}
+                  size={16}
+                  color={themeLight.textPrimary}
+                />
+              </Pressable>
 
-              {/* Center: Stop / Finish */}
-              <View style={styles.controlItem}>
-                <Pressable
-                  style={[styles.controlButton, styles.stopButton]}
-                  onPress={stopRecording}
-                  disabled={!hasRecording}
-                >
-                  <Icon name="stop" size={24} color={themeLight.textInverse} />
-                </Pressable>
-                <Body style={styles.controlLabel}>Stop</Body>
-              </View>
+              {/* Tap to complete */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.completeButton,
+                  pressed && styles.completeButtonPressed,
+                ]}
+                onPress={stopRecording}
+                disabled={!hasRecording}
+              >
+                <Body style={styles.completeButtonText}>Tap to complete</Body>
+                <Icon name="check" size={16} color="#FFFFFF" />
+              </Pressable>
+            </View>
+          </View>
+        </Animated.View>
 
-              {/* Right: Pause / Resume */}
-              <View style={styles.controlItem}>
-                {recordingState === 'recording' ? (
-                  <>
-                    <Pressable
-                      style={[styles.controlButton, styles.pauseButton]}
-                      onPress={pauseRecording}
-                    >
-                      <Icon name="pause" size={24} color={themeLight.accent} />
-                    </Pressable>
-                    <Body style={styles.controlLabel}>Pause</Body>
-                  </>
-                ) : (
-                  <>
-                    <Pressable
-                      style={[styles.controlButton, styles.resumeButton]}
-                      onPress={resumeRecording}
-                      disabled={!hasRecording}
-                    >
-                      <Icon name="play" size={24} color={themeLight.accent} />
-                    </Pressable>
-                    <Body style={styles.controlLabel}>Resume</Body>
-                  </>
-                )}
+        {/* ── Discard Confirmation Overlay ── */}
+        {showDiscardConfirm && (
+          <View style={styles.discardOverlay}>
+            <Pressable style={styles.discardDismiss} onPress={() => setShowDiscardConfirm(false)} />
+            <View style={[styles.discardCard, { paddingBottom: insets.bottom + 28 }]}>
+              <Title style={styles.discardTitle}>Discard this recording?</Title>
+              <Body style={styles.discardSubtext}>Your recording will be lost.</Body>
+              <View style={styles.discardButtonRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.discardCancelBtn,
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={() => setShowDiscardConfirm(false)}
+                >
+                  <Body style={styles.discardCancelText}>Cancel</Body>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.discardConfirmBtn,
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={handleConfirmDiscard}
+                >
+                  <Body style={styles.discardConfirmText}>Discard</Body>
+                </Pressable>
               </View>
             </View>
-          </Pressable>
-          {/* Bottom safe area padding */}
-          <View style={{ height: insets.bottom + 16 }} />
-        </Animated.View>
-      </Pressable>
+          </View>
+        )}
+      </View>
     </Modal>
   )
 }
 
 const styles = StyleSheet.create({
+  // ── Backdrop ──
+  backdrop: {
+    flex: 1,
+  },
   overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  fullScreenSheet: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: themeLight.bgPrimary,
+  },
+
+  // ── Transcript Section (top) ──
+  transcriptSection: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: themeLight.cardBg,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  sheetContent: {
-    flex: 1,
-    paddingHorizontal: 24, // --space-6
-  },
-  grabHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: themeLight.border,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8, // --space-2
-    marginBottom: 8, // --space-2
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 0,
-    marginBottom: 32, // --space-8
-  },
-  title: {
-    fontSize: 20,
-    color: themeLight.textPrimary,
   },
   closeButton: {
-    padding: 8, // --space-2
-    borderRadius: 20,
+    alignSelf: 'flex-end',
+    marginTop: 20,
+    marginRight: 20,
+    marginBottom: 16,
+    padding: 4,
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 120,
-    marginBottom: 32, // --space-8
-  },
-  timer: {
-    fontSize: 48,
-    color: themeLight.textPrimary,
-    marginBottom: 8, // --space-2
-  },
-  primaryText: {
-    color: themeLight.textPrimary,
-    fontSize: 20,
-    marginTop: 16, // --space-4
-    marginBottom: 8, // --space-2
-    textAlign: 'center',
-  },
-  secondaryText: {
-    color: themeLight.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 8, // --space-2
-  },
-  recordingLabel: {
-    color: themeLight.error, // --color-error
-    fontSize: 12,
-    marginTop: 8, // --space-2
-  },
-  helperText: {
-    color: themeLight.textSecondary,
-    fontSize: 16,
-  },
-  waveformContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    marginBottom: 40, // Extra space before controls
-    height: 60,
-  },
-  waveformBar: {
-    width: 4,
-    backgroundColor: themeLight.accent,
-    borderRadius: 2,
-    marginHorizontal: 4, // --space-1
-  },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingBottom: 16, // --space-4
-  },
-  controlItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  transcriptScroll: {
     flex: 1,
   },
-  controlButton: {
-    width: 60,
-    height: 60,
+  transcriptScrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  transcriptCard: {
+    backgroundColor: themeLight.bgSecondary,
+    borderRadius: 16,
+    padding: 18,
+  },
+  cardHeading: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 17,
+    color: themeLight.textPrimary,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: themeLight.borderSubtle,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  placeholderText: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
+    color: themeLight.textSecondary,
+    lineHeight: 15 * 1.7,
+  },
+  scrollGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+  },
+
+  // ── Controls Section (bottom, fixed) ──
+  controlsSection: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: themeLight.borderSubtle,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    alignItems: 'center',
+  },
+  timer: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 48,
+    color: themeLight.textPrimary,
+    lineHeight: 56,
+  },
+  listeningText: {
+    fontFamily: 'PlayfairDisplay_700Bold',
+    fontSize: 20,
+    color: themeLight.textPrimary,
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  subtitleText: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
+    color: themeLight.textSecondary,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+
+  // ── Waveform ──
+  waveformContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 30,
+    height: 48,
+    marginTop: 32,
+    marginBottom: 32,
   },
-  cancelButton: {
-    backgroundColor: themeLight.bgSecondary,
-    borderWidth: 1,
-    borderColor: themeLight.border,
-    shadowColor: themeLight.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3, // Android shadow
+  waveformBar: {
+    width: 3,
+    backgroundColor: themeLight.accent,
+    borderRadius: 2,
+    marginHorizontal: 1.75,
   },
-  stopButton: {
-    backgroundColor: themeLight.error,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    shadowColor: themeLight.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5, // Android shadow
+
+  // ── Buttons ──
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
   },
   pauseButton: {
-    backgroundColor: themeLight.bgSecondary,
-    borderWidth: 1,
-    borderColor: themeLight.border,
-    shadowColor: themeLight.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3, // Android shadow
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeLight.bgTertiary,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 26,
+    gap: 8,
   },
-  resumeButton: {
-    backgroundColor: themeLight.bgSecondary,
-    borderWidth: 1,
-    borderColor: themeLight.border,
-    shadowColor: themeLight.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3, // Android shadow
+  pauseButtonPressed: {
+    opacity: 0.8,
   },
-  controlLabel: {
-    color: themeLight.textSecondary,
-    fontSize: 12, // --font-size-xs
-    marginTop: 8, // --space-2
+  pauseButtonText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
+    color: themeLight.textPrimary,
+  },
+  completeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeLight.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 26,
+    gap: 8,
+  },
+  completeButtonPressed: {
+    backgroundColor: themeLight.accentHover,
+  },
+  completeButtonText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+
+  // ── Discard Confirmation ──
+  discardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  discardDismiss: {
+    flex: 1,
+  },
+  discardCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    alignItems: 'center',
+  },
+  discardTitle: {
+    fontSize: 20,
+    color: themeLight.textPrimary,
     textAlign: 'center',
+    marginBottom: 8,
   },
-  pausedLabel: {
+  discardSubtext: {
+    fontSize: 15,
     color: themeLight.textSecondary,
-    fontSize: 12,
-    marginTop: 8, // --space-2
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  discardButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  discardCancelBtn: {
+    flex: 1,
+    backgroundColor: themeLight.bgTertiary,
+    paddingVertical: 16,
+    borderRadius: 26,
+    alignItems: 'center',
+  },
+  discardCancelText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: themeLight.textPrimary,
+  },
+  discardConfirmBtn: {
+    flex: 1,
+    backgroundColor: themeLight.error,
+    paddingVertical: 16,
+    borderRadius: 26,
+    alignItems: 'center',
+  },
+  discardConfirmText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: '#FFFFFF',
   },
 })
