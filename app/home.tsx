@@ -532,8 +532,14 @@ export default function Home() {
                       loadAndPlayRecording(item)
                     }}
                   >
-                    <Body style={styles.replayButtonText}>Replay voice note</Body>
-                    <Icon name="play" size={12} color="#FFFFFF" />
+                    <Body style={styles.replayButtonText}>
+                      {playingRecordingId === item.id && isPlaying ? 'Pause' : 'Play'}
+                    </Body>
+                    <Icon
+                      name={playingRecordingId === item.id && isPlaying ? 'pause' : 'play'}
+                      size={12}
+                      color="#FFFFFF"
+                    />
                   </Pressable>
                 </Pressable>
               )}
