@@ -9,7 +9,7 @@ import * as Clipboard from 'expo-clipboard'
 import { Title, Body, Meta } from '../../components/typography'
 import { recordingsStore, Recording } from '../../store/recordings'
 import { OutputType } from '../../types'
-import AudioPlayer from '../../components/AudioPlayer'
+import AudioPlayer, { AudioPlayerHandle } from '../../components/AudioPlayer'
 import RecordingActionsSheet from '../../components/RecordingActionsSheet'
 import RenameModal from '../../components/RenameModal'
 import { generateRecordingTitle } from '../../lib/api'
@@ -41,6 +41,7 @@ export default function RecordingDetail() {
   const copiedToastAnim = useRef(new Animated.Value(0)).current
   const copiedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasAutoTitledRef = useRef(false)
+  const audioPlayerRef = useRef<AudioPlayerHandle>(null)
 
   // Toast state
   const [showSavedToast, setShowSavedToast] = useState(false)
@@ -615,6 +616,7 @@ export default function RecordingDetail() {
       {/* Audio Player */}
       <View style={styles.audioPlayerContainer}>
         <AudioPlayer
+          ref={audioPlayerRef}
           audioUri={recording.audioBlobUrl}
           durationSec={recording.durationSec}
         />
@@ -651,7 +653,11 @@ export default function RecordingDetail() {
                   (() => {
                     const structuredTranscript = getStructuredTranscript(recording.outputs.transcript)
                     return structuredTranscript ? (
-                      <TranscriptDisplay transcript={structuredTranscript} />
+                      <TranscriptDisplay
+                        transcript={structuredTranscript}
+                        durationSec={recording.durationSec}
+                        onTimestampPress={(positionMs) => audioPlayerRef.current?.seekTo(positionMs)}
+                      />
                     ) : (
                       <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
                     )

@@ -68,11 +68,12 @@ const TRANSCRIPT_PROMPT = `You are a transcript structuring engine. Given a raw 
 }
 
 Rules:
-- Break the transcript into logical segments (by topic shift or natural pause points)
-- Keep segment text faithful to the original — do NOT remove filler words
+- Break the transcript into paragraph-sized segments at natural pauses, topic shifts, or roughly every 3-4 sentences. Never put the entire transcript in a single segment
+- Keep segment text faithful to the original — do NOT remove filler words (um, uh, like, so, you know, I mean, etc.)
+- Do NOT add, remove, or reorder any words. Only clean up punctuation and capitalisation
 - speaker_separation should be "provided" only if you can clearly identify multiple speakers, otherwise "not_provided"
 - If speaker_separation is "not_provided", use "Speaker" for all segments
-- start times should increment (use 0 for first segment, estimate reasonable intervals)
+- start times should increment (use 0 for first segment, estimate reasonable intervals in seconds)
 - Return ONLY valid JSON, no markdown or extra text`
 
 export async function POST(request: NextRequest) {

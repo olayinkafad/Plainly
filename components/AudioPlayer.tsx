@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { View, StyleSheet, Pressable } from 'react-native'
 import { Audio } from 'expo-av'
 import Icon from './Icon'
@@ -10,9 +10,13 @@ interface AudioPlayerProps {
   durationSec: number
 }
 
+export interface AudioPlayerHandle {
+  seekTo: (positionMs: number) => Promise<void>
+}
+
 const SPEED_OPTIONS = [1, 1.5, 2, 0.5]
 
-export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps) {
+const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(function AudioPlayer({ audioUri, durationSec }, ref) {
   const [sound, setSound] = useState<Audio.Sound | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackPosition, setPlaybackPosition] = useState(0)
@@ -70,6 +74,18 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
       console.error('Failed to load audio:', error)
     }
   }
+
+  useImperativeHandle(ref, () => ({
+    seekTo: async (positionMs: number) => {
+      if (!sound) return
+      try {
+        await sound.setPositionAsync(Math.max(0, Math.min(positionMs, playbackDuration)))
+        setPlaybackPosition(Math.max(0, Math.min(positionMs, playbackDuration)))
+      } catch (error) {
+        console.error('Failed to seek:', error)
+      }
+    },
+  }), [sound, playbackDuration])
 
   const togglePlayback = async () => {
     if (!sound) return
@@ -172,7 +188,9 @@ export default function AudioPlayer({ audioUri, durationSec }: AudioPlayerProps)
       </Pressable>
     </View>
   )
-}
+})
+
+export default AudioPlayer
 
 const styles = StyleSheet.create({
   container: {
