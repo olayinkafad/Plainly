@@ -81,6 +81,6 @@ PORT=3001
 
 ### Process Recording
 - **POST** `/api/process-recording`
-- Accepts: `multipart/form-data` with `audio` file and `format` parameter
-- Formats: `transcript`, `summary`, `action_items`, `key_points`
-- Returns: `{ transcript: string, output: string }`
+- Accepts: `multipart/form-data` with `audio` file and optional `format` parameter
+- Formats: `transcript`, `summary` (or omit for both)
+- Returns: `{ transcript, summary, structuredTranscript }` (dual) or `{ transcript, output }` (single)

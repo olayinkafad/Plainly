@@ -1,14 +1,9 @@
-import { OutputType } from '../types'
-import { API_BASE_URL, API_ENDPOINTS } from './config'
-
-export interface ProcessRecordingRequest {
-  audioUri: string
-  format: OutputType
-}
+import { API_ENDPOINTS } from './config'
 
 export interface ProcessRecordingResponse {
   transcript: string
-  output: string
+  summary: string
+  structuredTranscript: string
   error?: string
 }
 
@@ -16,11 +11,10 @@ export interface ProcessRecordingResponse {
  * Process a recording through the backend API
  * 1. Sends audio file to backend
  * 2. Backend transcribes with Whisper
- * 3. Backend generates structured output with GPT-4o-mini
+ * 3. Backend generates both summary and structured transcript with GPT-4o-mini
  */
 export async function processRecording(
-  audioUri: string,
-  format: OutputType
+  audioUri: string
 ): Promise<ProcessRecordingResponse> {
   try {
     // Fetch the audio file from the local URI
@@ -29,9 +23,7 @@ export async function processRecording(
       throw new Error('Failed to read audio file')
     }
 
-    const audioBlob = await audioResponse.blob()
-
-    // Create FormData with audio file and format
+    // Create FormData with audio file
     const formData = new FormData()
 
     // Determine file extension from URI or default to m4a (iOS default)
@@ -46,47 +38,46 @@ export async function processRecording(
       name: filename,
     } as any)
 
-    formData.append('format', format)
+    // No format param — backend generates both summary and transcript
 
     // Send to backend
     const response = await fetch(API_ENDPOINTS.processRecording, {
       method: 'POST',
       body: formData,
-      headers: {
-        // Don't set Content-Type - let fetch set it with boundary for FormData
-      },
     })
 
     const data = await response.json()
 
     if (!response.ok) {
-      // Return error in the expected format
       return {
         transcript: '',
-        output: '',
+        summary: '',
+        structuredTranscript: '',
         error: data.error || `Server error: ${response.status}`,
       }
     }
 
     return {
       transcript: data.transcript || '',
-      output: data.output || '',
+      summary: data.summary || '',
+      structuredTranscript: data.structuredTranscript || '',
     }
   } catch (error) {
     console.error('Error processing recording:', error)
 
-    // Handle network errors
     if (error instanceof TypeError && error.message.includes('Network')) {
       return {
         transcript: '',
-        output: '',
+        summary: '',
+        structuredTranscript: '',
         error: 'Unable to connect to server. Please check your connection.',
       }
     }
 
     return {
       transcript: '',
-      output: '',
+      summary: '',
+      structuredTranscript: '',
       error: error instanceof Error ? error.message : 'Failed to process recording',
     }
   }
@@ -94,7 +85,6 @@ export async function processRecording(
 
 /**
  * Generate a title for a recording based on its content
- * Uses transcript or summary to generate a short, human-friendly title
  */
 export async function generateRecordingTitle(
   transcript?: string,
@@ -114,14 +104,12 @@ export async function generateRecordingTitle(
     })
 
     if (!response.ok) {
-      // Silently fail - return fallback title
       return 'Recording'
     }
 
     const data = await response.json()
     return data.title || 'Recording'
   } catch (error) {
-    // Silently fail - return fallback title
     return 'Recording'
   }
 }

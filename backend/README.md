@@ -107,9 +107,18 @@ Process an audio recording and generate the requested format.
 - Content-Type: `multipart/form-data`
 - Body:
   - `audio`: Audio file (M4A, MP3, WAV, etc.)
-  - `format`: One of `transcript`, `summary`, `action_items`, `key_points`
+  - `format` (optional): One of `transcript`, `summary`. If omitted, generates both.
 
-**Response:**
+**Response (no format — dual generation):**
+```json
+{
+  "transcript": "Full transcript text...",
+  "summary": "{structured summary JSON}",
+  "structuredTranscript": "{structured transcript JSON}"
+}
+```
+
+**Response (single format):**
 ```json
 {
   "transcript": "Full transcript text...",

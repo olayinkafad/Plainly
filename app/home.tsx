@@ -131,13 +131,6 @@ export default function Home() {
     }, 3000)
   }
 
-  const handleProcessingComplete = (recordingId: string) => {
-    router.push({
-      pathname: '/generating',
-      params: { recordingId, format: 'summary' },
-    })
-  }
-
   const handleRecordingPress = (id: string) => {
     router.push(`/recordings/${id}`)
   }
@@ -587,9 +580,11 @@ export default function Home() {
       {/* Recording Modal */}
       <RecordingModal
         isOpen={showRecordingModal}
-        onClose={() => setShowRecordingModal(false)}
+        onClose={() => {
+          setShowRecordingModal(false)
+          loadRecordings()
+        }}
         onSave={handleSaveRecording}
-        onFormatSelect={handleProcessingComplete}
       />
 
       {/* Mic Permission Sheet */}

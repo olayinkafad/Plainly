@@ -10,12 +10,13 @@ import { Title, Body } from './typography'
 import Button from './Button'
 import { Recording, recordingsStore } from '../store/recordings'
 import { themeLight } from '../constants/theme'
+import { processRecording, generateRecordingTitle } from '../lib/api'
+import { StructuredSummary, StructuredTranscript } from '../types'
 
 interface RecordingModalProps {
   isOpen: boolean
   onClose: () => void
   onSave: (recording: Recording, showToast?: boolean) => void
-  onFormatSelect: (recordingId: string) => void
 }
 
 type RecordingState = 'idle' | 'recording' | 'paused'
@@ -29,6 +30,8 @@ const PROCESSING_STEPS = [
   'Finishing touches',
 ]
 
+const STEP_MIN_TIMES = [2000, 2000, 2000, 1500]
+
 // Pre-computed static bar heights for visual variety (taller in center, shorter at edges)
 const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
   const center = WAVEFORM_BAR_COUNT / 2
@@ -36,11 +39,12 @@ const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
   return 16 + 28 * (1 - distance * 0.7) + Math.random() * 8
 })
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
 export default function RecordingModal({
   isOpen,
   onClose,
   onSave,
-  onFormatSelect,
 }: RecordingModalProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -62,7 +66,18 @@ export default function RecordingModal({
   const [activeStep, setActiveStep] = useState(-1)
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set())
   const savedRecordingIdRef = useRef<string | null>(null)
-  const stepTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  const savedAudioUriRef = useRef<string | null>(null)
+
+  // API processing state
+  const apiCompleteRef = useRef(false)
+  const apiResultRef = useRef<{
+    transcript: string
+    summary: StructuredSummary | string
+    structuredTranscript: StructuredTranscript | string
+  } | null>(null)
+  const apiErrorRef = useRef<string | null>(null)
+  const stepResolverRef = useRef<(() => void) | null>(null)
+  const processingAbortedRef = useRef(false)
 
   // Phase crossfade animations
   const recordingViewOpacity = useRef(new Animated.Value(1)).current
@@ -89,14 +104,20 @@ export default function RecordingModal({
 
   // ── Reset processing state ──
   const resetProcessingState = useCallback(() => {
-    // Clear all step timeouts
-    stepTimeoutsRef.current.forEach(t => clearTimeout(t))
-    stepTimeoutsRef.current = []
+    processingAbortedRef.current = true
 
     setPhase('recording')
     setActiveStep(-1)
     setCompletedSteps(new Set())
     savedRecordingIdRef.current = null
+    savedAudioUriRef.current = null
+
+    // Reset API state
+    apiCompleteRef.current = false
+    apiResultRef.current = null
+    apiErrorRef.current = null
+    stepResolverRef.current = null
+    processingAbortedRef.current = false
 
     // Reset crossfade
     recordingViewOpacity.setValue(1)
@@ -234,9 +255,9 @@ export default function RecordingModal({
         errorMessage.includes('Only one Recording object can be prepared') &&
         retryCount < MAX_RETRIES
       ) {
-        const delay = RETRY_DELAYS[retryCount] || 2000
-        console.log(`Retrying recording start after ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
-        await new Promise(resolve => setTimeout(resolve, delay))
+        const retryDelay = RETRY_DELAYS[retryCount] || 2000
+        console.log(`Retrying recording start after ${retryDelay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`)
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
         return startRecording(retryCount + 1)
       }
 
@@ -289,8 +310,9 @@ export default function RecordingModal({
 
         await onSave(newRecording, false)
 
-        // Store ID for after processing animation completes
+        // Store ID and URI for processing
         savedRecordingIdRef.current = newRecording.id
+        savedAudioUriRef.current = uri
 
         // Stop recording UI
         setRecordingState('idle')
@@ -402,10 +424,10 @@ export default function RecordingModal({
     }
     dotScales.forEach(d => d.setValue(0.6))
 
-    const createDotAnim = (dotAnim: Animated.Value, delay: number) =>
+    const createDotAnim = (dotAnim: Animated.Value, dotDelay: number) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(delay),
+          Animated.delay(dotDelay),
           Animated.timing(dotAnim, {
             toValue: 1.0,
             duration: 400,
@@ -418,8 +440,7 @@ export default function RecordingModal({
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-          // Pad to fill the 1.2s loop
-          Animated.delay(400 - delay),
+          Animated.delay(400 - dotDelay),
         ])
       )
 
@@ -440,11 +461,10 @@ export default function RecordingModal({
     dotScales.forEach(d => d.setValue(0.6))
   }
 
-  const activateStep = (index: number) => {
+  const activateStepAnim = (index: number) => {
     setActiveStep(index)
     startDotBounce()
 
-    // Fade in + slide up
     Animated.parallel([
       Animated.timing(stepAnims[index].opacity, {
         toValue: 1,
@@ -459,20 +479,12 @@ export default function RecordingModal({
         useNativeDriver: true,
       }),
     ]).start()
-
-    // Schedule completion
-    const delay = index === 3 ? 1500 : 2000
-    const t = setTimeout(() => {
-      completeStep(index)
-    }, delay)
-    stepTimeoutsRef.current.push(t)
   }
 
-  const completeStep = (index: number) => {
+  const completeStepAnim = (index: number) => {
     setCompletedSteps(prev => new Set(prev).add(index))
     stopDotBounce()
 
-    // Checkmark pop: scale 0 → 1.1 → 1.0
     Animated.sequence([
       Animated.timing(stepAnims[index].checkScale, {
         toValue: 1.1,
@@ -486,24 +498,110 @@ export default function RecordingModal({
         useNativeDriver: true,
       }),
     ]).start()
+  }
 
-    if (index < PROCESSING_STEPS.length - 1) {
-      // Activate next step after brief gap
-      const t = setTimeout(() => {
-        activateStep(index + 1)
-      }, 200)
-      stepTimeoutsRef.current.push(t)
-    } else {
-      // All steps done — finish after brief pause
-      const t = setTimeout(() => {
-        finishProcessing()
-      }, 800)
-      stepTimeoutsRef.current.push(t)
+  const callProcessingAPI = async () => {
+    const audioUri = savedAudioUriRef.current
+    if (!audioUri) {
+      apiErrorRef.current = 'No audio URI available'
+      apiCompleteRef.current = true
+      return
     }
+
+    try {
+      const result = await processRecording(audioUri)
+
+      if (processingAbortedRef.current) return
+
+      if (result.error) {
+        apiErrorRef.current = result.error
+        apiCompleteRef.current = true
+        // Release last step if waiting
+        if (stepResolverRef.current) stepResolverRef.current()
+        return
+      }
+
+      // Parse structured outputs
+      let parsedSummary: StructuredSummary | string
+      try {
+        parsedSummary = JSON.parse(result.summary)
+      } catch {
+        parsedSummary = result.summary
+      }
+
+      let parsedTranscript: StructuredTranscript | string
+      try {
+        parsedTranscript = JSON.parse(result.structuredTranscript)
+      } catch {
+        parsedTranscript = result.structuredTranscript
+      }
+
+      apiResultRef.current = {
+        transcript: result.transcript,
+        summary: parsedSummary,
+        structuredTranscript: parsedTranscript,
+      }
+      apiCompleteRef.current = true
+
+      // Release last step if waiting
+      if (stepResolverRef.current) stepResolverRef.current()
+    } catch (error) {
+      if (processingAbortedRef.current) return
+      apiErrorRef.current = error instanceof Error ? error.message : 'Failed to process recording'
+      apiCompleteRef.current = true
+      if (stepResolverRef.current) stepResolverRef.current()
+    }
+  }
+
+  const runStepSequence = async () => {
+    for (let i = 0; i < PROCESSING_STEPS.length; i++) {
+      if (processingAbortedRef.current) return
+
+      activateStepAnim(i)
+
+      // Wait minimum display time for this step
+      await delay(STEP_MIN_TIMES[i])
+
+      if (processingAbortedRef.current) return
+
+      // For the last step, also wait for API completion
+      if (i === PROCESSING_STEPS.length - 1 && !apiCompleteRef.current) {
+        await new Promise<void>((resolve) => {
+          stepResolverRef.current = resolve
+          // Safety: check if API already completed while we were setting up
+          if (apiCompleteRef.current) {
+            resolve()
+          }
+        })
+      }
+
+      if (processingAbortedRef.current) return
+
+      completeStepAnim(i)
+
+      // Brief gap between steps (except after last)
+      if (i < PROCESSING_STEPS.length - 1) {
+        await delay(200)
+      }
+    }
+
+    if (processingAbortedRef.current) return
+
+    // All steps done — finish after brief pause
+    await delay(800)
+
+    if (processingAbortedRef.current) return
+
+    await finishProcessing()
   }
 
   const startProcessingPhase = () => {
     setPhase('processing')
+    processingAbortedRef.current = false
+    apiCompleteRef.current = false
+    apiResultRef.current = null
+    apiErrorRef.current = null
+    stepResolverRef.current = null
 
     // Crossfade: recording out, processing in
     Animated.parallel([
@@ -518,21 +616,73 @@ export default function RecordingModal({
         useNativeDriver: true,
       }),
     ]).start(() => {
-      // Start first step immediately after crossfade
-      activateStep(0)
+      // Start step animations AND API call simultaneously
+      runStepSequence()
+      callProcessingAPI()
     })
   }
 
-  const finishProcessing = () => {
+  const finishProcessing = async () => {
     const savedId = savedRecordingIdRef.current
+
+    // Check for API errors
+    if (apiErrorRef.current) {
+      resetProcessingState()
+      setDuration(0)
+      onClose()
+
+      if (savedId) {
+        if (apiErrorRef.current.includes('No speech detected')) {
+          // Navigate to result screen to show empty state
+          setTimeout(() => {
+            router.replace(`/recordings/${savedId}`)
+          }, 300)
+        } else {
+          // Navigate to generating screen for error display/retry
+          setTimeout(() => {
+            router.push({
+              pathname: '/generating',
+              params: { recordingId: savedId, errorMessage: apiErrorRef.current! },
+            })
+          }, 300)
+        }
+      }
+      return
+    }
+
+    // Save outputs to recording store
+    if (savedId && apiResultRef.current) {
+      const { summary, structuredTranscript, transcript } = apiResultRef.current
+
+      await recordingsStore.update(savedId, {
+        outputs: {
+          summary: summary,
+          transcript: structuredTranscript,
+        },
+        lastViewedFormat: 'summary',
+      })
+
+      // Auto-generate title in background
+      const summaryText = typeof summary === 'object' && 'one_line' in summary
+        ? summary.one_line
+        : typeof summary === 'string' ? summary : undefined
+
+      generateRecordingTitle(transcript, summaryText)
+        .then(async (title) => {
+          if (title && title !== 'Recording') {
+            await recordingsStore.update(savedId, { title })
+          }
+        })
+        .catch(console.error)
+    }
+
     resetProcessingState()
     setDuration(0)
-
     onClose()
 
     if (savedId) {
       setTimeout(() => {
-        onFormatSelect(savedId)
+        router.replace(`/recordings/${savedId}`)
       }, 300)
     }
   }

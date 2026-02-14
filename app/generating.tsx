@@ -1,248 +1,120 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { View, StyleSheet, ActivityIndicator } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Title, Body, Meta } from '../components/typography'
-import { recordingsStore, Recording } from '../store/recordings'
-import { OutputType, TranscriptOutput, StructuredTranscript, SummaryOutput, StructuredSummary, ActionItemsOutput, StructuredActionItems } from '../types'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Title, Body } from '../components/typography'
+import { recordingsStore } from '../store/recordings'
+import { StructuredTranscript, StructuredSummary } from '../types'
 import Button from '../components/Button'
 import { processRecording } from '../lib/api'
 import { themeLight } from '../constants/theme'
 
-const MIN_LOADING_TIME = 700 // Minimum visible loading time in milliseconds
-
+/**
+ * Error / retry screen for when processing fails in RecordingModal.
+ * Accepts recordingId and optional errorMessage params.
+ * On retry: calls processRecording (both formats), saves outputs, navigates to result.
+ */
 export default function Generating() {
   const router = useRouter()
-  const insets = useSafeAreaInsets()
-  const { recordingId, format } = useLocalSearchParams<{ recordingId: string; format: OutputType }>()
-  const [recording, setRecording] = useState<Recording | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const startTimeRef = useRef<number>(Date.now())
+  const { recordingId, errorMessage } = useLocalSearchParams<{
+    recordingId: string
+    errorMessage?: string
+  }>()
+  const [error, setError] = useState<string | null>(errorMessage || null)
+  const [retrying, setRetrying] = useState(false)
 
+  // If no error message was passed, auto-retry on mount
   useEffect(() => {
-    if (recordingId && format) {
-      loadRecordingAndGenerate()
+    if (recordingId && !errorMessage) {
+      handleRetry()
     }
-  }, [recordingId, format])
+  }, [recordingId])
 
-  const getFormatContent = (format?: OutputType) => {
-    if (!format) {
-      return {
-        title: 'Generating your output',
-        helper: null,
-      }
-    }
-
-    const formatContent: Record<OutputType, { title: string; helper: string | null }> = {
-      summary: {
-        title: 'Generating your summary',
-        helper: 'Creating a quick overview and key takeaways.',
-      },
-      action_items: {
-        title: 'Generating your action items',
-        helper: 'Pulling out clear next steps.',
-      },
-      transcript: {
-        title: 'Generating your transcript',
-        helper: 'Capturing everything you said, word for word.',
-      },
-    }
-
-    return formatContent[format]
-  }
-
-  const loadRecordingAndGenerate = async () => {
-    if (!recordingId || !format) return
+  const handleRetry = async () => {
+    if (!recordingId) return
 
     try {
+      setRetrying(true)
       setError(null)
-      startTimeRef.current = Date.now()
 
-      // Load recording
-      const loadedRecording = await recordingsStore.getById(recordingId)
-      if (!loadedRecording) {
+      const recording = await recordingsStore.getById(recordingId)
+      if (!recording) {
         setError('Recording not found')
+        setRetrying(false)
         return
       }
-      setRecording(loadedRecording)
 
-      // Process recording with real API
-      const result = await processRecording(loadedRecording.audioBlobUrl, format)
+      const result = await processRecording(recording.audioBlobUrl)
 
-      // Check for API errors
       if (result.error) {
-        // Handle "No speech detected" error specially - navigate to result page with empty state
         if (result.error.includes('No speech detected')) {
-          // Don't save an output - just set lastViewedFormat so the format shows in tabs
-          // The empty state will be shown because there's no output for this format
-          // This preserves existing outputs and allows other formats to be generated
-          await recordingsStore.update(recordingId, {
-            lastViewedFormat: format,
-          })
-
-          // Enforce minimum loading time
-          const elapsed = Date.now() - startTimeRef.current
-          if (elapsed < MIN_LOADING_TIME) {
-            await new Promise(resolve => setTimeout(resolve, MIN_LOADING_TIME - elapsed))
-          }
-
-          // Navigate to result screen to show edge case empty state
           router.replace(`/recordings/${recordingId}`)
           return
         }
-        
-        // For other errors, show error screen
         setError(result.error)
+        setRetrying(false)
         return
       }
 
-      // Prepare outputs - handle structured formats
-      const outputs: Partial<Recording['outputs']> = {}
-      
-      if (format === 'transcript') {
-        // Parse structured transcript JSON
-        try {
-          const parsed = JSON.parse(result.output)
-          if (parsed.format === 'transcript' && Array.isArray(parsed.segments)) {
-            outputs.transcript = parsed as StructuredTranscript
-          } else {
-            // Fallback to string if parsing fails or invalid structure
-            outputs.transcript = result.output
-          }
-        } catch {
-          // Not JSON, store as string (backward compatibility)
-          outputs.transcript = result.output
+      // Parse summary
+      let summary: StructuredSummary | string = result.summary
+      try {
+        const parsed = JSON.parse(result.summary)
+        if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
+          summary = parsed as StructuredSummary
         }
-      } else if (format === 'summary') {
-        // Parse structured summary JSON
-        try {
-          const parsed = JSON.parse(result.output)
-          if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
-            outputs.summary = parsed as StructuredSummary
-          } else {
-            // Fallback to string if parsing fails or invalid structure
-            outputs.summary = result.output
-          }
-        } catch {
-          // Not JSON, store as string (backward compatibility)
-          outputs.summary = result.output
-        }
-      } else if (format === 'action_items') {
-        // Parse structured action items JSON
-        try {
-          const parsed = JSON.parse(result.output)
-          if (parsed.format === 'action_items' && typeof parsed.none_found === 'boolean' && Array.isArray(parsed.items)) {
-            outputs.action_items = parsed as StructuredActionItems
-          } else {
-            // Fallback to string if parsing fails or invalid structure
-            outputs.action_items = result.output
-          }
-        } catch {
-          // Not JSON, store as string (backward compatibility)
-          outputs.action_items = result.output
-        }
-      } else {
-        // Other formats store as string
-        outputs[format] = result.output
+      } catch {
+        // Keep as string
       }
 
-      // Only save the requested format - do not save transcript unless explicitly requested
-      // The transcript is an intermediate step but should not be stored unless the user selected it
+      // Parse structured transcript
+      let transcript: StructuredTranscript | string = result.structuredTranscript
+      try {
+        const parsed = JSON.parse(result.structuredTranscript)
+        if (parsed.format === 'transcript' && Array.isArray(parsed.segments)) {
+          transcript = parsed as StructuredTranscript
+        }
+      } catch {
+        // Keep as string
+      }
 
-      // Update recording with generated output (preserve existing outputs)
+      // Save both outputs
       await recordingsStore.update(recordingId, {
         outputs: {
-          ...loadedRecording.outputs, // Preserve all existing outputs
-          ...outputs,
+          ...recording.outputs,
+          summary,
+          transcript,
         },
-        lastViewedFormat: format,
+        lastViewedFormat: 'summary',
       })
 
-      // Enforce minimum loading time
-      const elapsed = Date.now() - startTimeRef.current
-      if (elapsed < MIN_LOADING_TIME) {
-        await new Promise(resolve => setTimeout(resolve, MIN_LOADING_TIME - elapsed))
-      }
-
-      // Navigate to result screen
       router.replace(`/recordings/${recordingId}`)
-    } catch (error: any) {
-      console.error('Failed to generate output:', error)
+    } catch (err: any) {
+      let errorMsg = 'Something went wrong. Please try again.'
 
-      // Handle "No speech detected" error specially - navigate to result page with empty state
-      if (error?.message?.includes('No speech detected')) {
-        if (!recordingId || !format) return
-        
-        // Load recording again to get latest state
-        const latestRecording = await recordingsStore.getById(recordingId)
-        if (!latestRecording) {
-          setError('Recording not found')
-          return
-        }
-
-        // Don't save an output - just set lastViewedFormat so the format shows in tabs
-        // The empty state will be shown because there's no output for this format
-        // This preserves existing outputs and allows other formats to be generated
-        await recordingsStore.update(recordingId, {
-          lastViewedFormat: format,
-        })
-
-        // Enforce minimum loading time
-        const elapsed = Date.now() - startTimeRef.current
-        if (elapsed < MIN_LOADING_TIME) {
-          await new Promise(resolve => setTimeout(resolve, MIN_LOADING_TIME - elapsed))
-        }
-
-        // Navigate to result screen to show edge case empty state
-        router.replace(`/recordings/${recordingId}`)
-        return
+      if (err?.message?.includes('Network') || err?.message?.includes('connect')) {
+        errorMsg = 'Unable to connect to server. Please check your internet connection.'
+      } else if (err?.message?.includes('Rate limit')) {
+        errorMsg = 'Too many requests. Please wait a moment and try again.'
+      } else if (err?.message?.includes('too short')) {
+        errorMsg = 'Recording is too short. Please record for at least a few seconds.'
+      } else if (err?.message) {
+        errorMsg = err.message
       }
 
-      // Handle other specific error messages
-      let errorMessage = 'Something went wrong. Please try again.'
-
-      if (error?.message?.includes('Network') || error?.message?.includes('connect')) {
-        errorMessage = 'Unable to connect to server. Please check your internet connection and make sure the backend is running.'
-      } else if (error?.message?.includes('Rate limit')) {
-        errorMessage = 'Too many requests. Please wait a moment and try again.'
-      } else if (error?.message?.includes('too short')) {
-        errorMessage = 'Recording is too short. Please record for at least a few seconds.'
-      } else if (error?.message) {
-        errorMessage = error.message
-      }
-
-      setError(errorMessage)
+      setError(errorMsg)
+      setRetrying(false)
     }
   }
 
-  const formatContent = getFormatContent(format)
-
-  if (error) {
+  if (retrying) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.content}>
           <View style={styles.centerContent}>
-            <Title style={styles.errorTitle}>Something went wrong</Title>
-            <Body style={styles.errorBody}>{error}</Body>
-            <Button
-              variant="primary"
-              fullWidth
-              onPress={() => {
-                setError(null)
-                loadRecordingAndGenerate()
-              }}
-              style={styles.retryButton}
-            >
-              Try again
-            </Button>
-            <Button
-              variant="secondary"
-              fullWidth
-              onPress={() => router.back()}
-              style={styles.backButton}
-            >
-              Go back
-            </Button>
+            <ActivityIndicator size="large" color={themeLight.accent} style={styles.loader} />
+            <Title style={styles.title}>Processing your recording</Title>
+            <Body style={styles.helper}>Generating summary and transcript...</Body>
           </View>
         </View>
       </SafeAreaView>
@@ -253,11 +125,28 @@ export default function Generating() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color={themeLight.accent} style={styles.loader} />
-          <Title style={styles.title}>{formatContent.title}</Title>
-          {formatContent.helper && (
-            <Body style={styles.helper}>{formatContent.helper}</Body>
-          )}
+          <Title style={styles.errorTitle}>Something went wrong</Title>
+          <Body style={styles.errorBody}>
+            {error || 'An unexpected error occurred.'}
+          </Body>
+          <View style={styles.retryButton}>
+            <Button
+              variant="primary"
+              fullWidth
+              onPress={handleRetry}
+            >
+              Try again
+            </Button>
+          </View>
+          <View style={styles.backButton}>
+            <Button
+              variant="secondary"
+              fullWidth
+              onPress={() => router.back()}
+            >
+              Go back
+            </Button>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -271,7 +160,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24, // --space-6
+    paddingHorizontal: 24,
     maxWidth: 420,
     width: '100%',
     alignSelf: 'center',
@@ -282,32 +171,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loader: {
-    marginBottom: 32, // --space-8
+    marginBottom: 32,
   },
   title: {
     fontSize: 24,
     color: themeLight.textPrimary,
     textAlign: 'center',
-    marginBottom: 12, // --space-3
+    marginBottom: 12,
   },
   helper: {
     fontSize: 14,
     color: themeLight.textSecondary,
     textAlign: 'center',
-    marginTop: 4, // --space-1
+    marginTop: 4,
   },
   errorTitle: {
     fontSize: 24,
     color: themeLight.textPrimary,
     textAlign: 'center',
-    marginBottom: 12, // --space-3
+    marginBottom: 12,
   },
   errorBody: {
     fontSize: 14,
     color: themeLight.textSecondary,
     textAlign: 'center',
-    marginBottom: 24, // --space-6
-    paddingHorizontal: 16, // --space-4
+    marginBottom: 24,
+    paddingHorizontal: 16,
   },
   retryButton: {
     maxWidth: 300,

@@ -13,7 +13,6 @@ interface FormatOption {
 
 const formatOptions: FormatOption[] = [
   { key: 'summary', title: 'Summary' },
-  { key: 'action_items', title: 'Action items' },
   { key: 'transcript', title: 'Transcript' },
 ]
 
@@ -68,7 +67,6 @@ export default function FormatActionSheet({
   const getFormatLabel = (format: OutputType): string => {
     const formatMap: Record<OutputType, string> = {
       summary: 'Summary',
-      action_items: 'Action items',
       transcript: 'Transcript',
     }
     return formatMap[format]

@@ -30,10 +30,8 @@ clarity > speed > features > cleverness.
 
 ## Core User Principle
 
-Plainly always asks *why* before it acts.
-
-Users must explicitly choose what they want their recording to become.
-Never auto-guess intent.
+Plainly turns spoken thoughts into clear, useful outputs automatically.
+After recording, both summary and transcript are generated together.
 
 ---
 
@@ -50,7 +48,7 @@ Do not create parallel logic after this point.
 
 Onboarding CTA → Recording screen
 
-After finishing recording → Choose format -> Result screen
+After finishing recording → Processing animation (both formats generated) → Result screen
 
 Then → Home
 
@@ -62,35 +60,30 @@ App opens on Home
 
 ## Output Formats (Authoritative)
 
-Plainly supports exactly three formats:
+Plainly supports exactly two formats:
 
 - summary
-- action_items
 - transcript
 
 Rules:
-- Users choose ONE format immediately after recording
-- Only the selected format is generated initially
-- Other formats are generated on demand from the detail screen
-- Never generate all formats at once
-
-Why:
-Intent-first generation improves clarity, speed, and trust.
-Bulk generation creates cognitive overload and hides product judgment.
+- Both formats are generated automatically after recording
+- The backend runs both GPT calls in parallel for speed
+- The result screen shows both formats as switchable tabs
+- Default view is summary
 
 ---
 
-## Hybrid Generation Model (Critical)
+## Generation Model (Critical)
 
-The product follows a hybrid model:
+The product follows a single-step model:
 
 1. User records or uploads audio
-2. User selects ONE format
-3. Plainly generates ONE output
-4. User may switch to other formats afterward without re-recording
+2. User taps "Tap to complete"
+3. Processing animation plays while both formats are generated in parallel
+4. Result screen shows summary and transcript as switchable tabs
 
 Switching formats:
-- Replaces content in place
+- Switches tab in place
 - Does not navigate away
 - Does not reset scroll position
 

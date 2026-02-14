@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { OutputType, TranscriptOutput, SummaryOutput, ActionItemsOutput } from '../types'
+import { OutputType, TranscriptOutput, SummaryOutput } from '../types'
 
 export interface Recording {
   id: string
@@ -9,7 +9,6 @@ export interface Recording {
   audioBlobUrl: string
   outputs: {
     summary?: SummaryOutput
-    action_items?: ActionItemsOutput
     transcript?: TranscriptOutput
   }
   lastViewedFormat?: OutputType
@@ -78,14 +77,7 @@ export const recordingsStore = {
     }
   },
 
-  // Clear cache (useful for testing or forced refresh)
   clearCache: (): void => {
     recordingsCache = null
   },
-
-  // TODO: Future pinned sorting
-  // When implementing pinned:
-  // - Add isPinned field to Recording interface
-  // - Update sorting to show pinned first (most recent pinned), then recents
-  // - Sorting logic: pinned.sort((a, b) => b.createdAt - a.createdAt), then unpinned.sort(...)
 }
