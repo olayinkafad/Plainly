@@ -16,5 +16,7 @@ export const API_BASE_URL =
 
 export const API_ENDPOINTS = {
   processRecording: `${API_BASE_URL}/api/process-recording`,
+  transcribe: `${API_BASE_URL}/api/transcribe`,
+  generateOutputs: `${API_BASE_URL}/api/generate-outputs`,
   generateTitle: `${API_BASE_URL}/api/generate-title`,
 }

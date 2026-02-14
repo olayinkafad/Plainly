@@ -209,6 +209,189 @@ Rules:
   }
 })
 
+// Transcribe audio endpoint
+// Accepts audio file, transcribes with Whisper, returns raw transcript
+app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file provided' })
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' })
+    }
+
+    console.log(`Transcribing recording: size=${req.file.size} bytes`)
+
+    let audioFile
+    if (typeof File !== 'undefined') {
+      audioFile = new File([req.file.buffer], req.file.originalname, {
+        type: req.file.mimetype || 'audio/m4a',
+      })
+    } else {
+      const { Readable } = require('stream')
+      const stream = Readable.from(req.file.buffer)
+      Object.defineProperty(stream, 'name', { value: req.file.originalname })
+      Object.defineProperty(stream, 'type', { value: req.file.mimetype || 'audio/m4a' })
+      audioFile = stream
+    }
+
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: 'whisper-1',
+      language: 'en',
+      response_format: 'text',
+    })
+
+    const transcript = transcription
+
+    if (!transcript || transcript.trim().length === 0) {
+      return res.status(400).json({
+        error: 'No speech detected in recording',
+        transcript: '',
+      })
+    }
+
+    console.log(`Transcript length: ${transcript.length} characters`)
+
+    return res.json({ transcript })
+  } catch (error) {
+    console.error('Error transcribing:', error)
+
+    if (error?.status === 401) {
+      return res.status(401).json({ error: 'Invalid API key. Please check your OpenAI API key.' })
+    }
+    if (error?.status === 429) {
+      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' })
+    }
+    if (error?.code === 'ENOENT' || error?.message?.includes('File')) {
+      return res.status(400).json({ error: 'Invalid audio file format.' })
+    }
+
+    return res.status(500).json({ error: error?.message || 'Failed to transcribe recording' })
+  }
+})
+
+// Generate outputs endpoint
+// Accepts raw transcript, generates summary and structured transcript in parallel
+app.post('/api/generate-outputs', express.json(), async (req, res) => {
+  try {
+    const { transcript } = req.body
+
+    if (!transcript || !transcript.trim()) {
+      return res.status(400).json({ error: 'No transcript provided' })
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured' })
+    }
+
+    console.log('Generating summary and structured transcript...')
+
+    const [summaryResult, structuredTranscriptResult] = await Promise.all([
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a precise summarisation engine. Given a raw transcript, produce a JSON object with this exact schema:
+
+{
+  "format": "summary",
+  "one_line": "A single sentence capturing the core idea (max 120 chars)",
+  "key_takeaways": ["takeaway 1", "takeaway 2", "takeaway 3"],
+  "context": "Optional sentence about setting/participants, or null",
+  "confidence_notes": {
+    "possible_missed_words": false,
+    "mixed_language_detected": false,
+    "noisy_audio_suspected": false,
+    "reason": null
+  }
+}
+
+Rules:
+- Do not add new information
+- Preserve original meaning
+- Remove filler words
+- Be concise and structured
+- If unsure, say so explicitly in confidence_notes
+- key_takeaways should have 2-5 items
+- Return ONLY valid JSON, no markdown or extra text`,
+          },
+          {
+            role: 'user',
+            content: `Here is the transcript:\n\n${transcript}`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+        response_format: { type: 'json_object' },
+      }),
+
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a transcript structuring engine. Given a raw transcript, produce a JSON object with this exact schema:
+
+{
+  "format": "transcript",
+  "segments": [
+    {
+      "speaker": "Speaker",
+      "text": "The spoken text for this segment",
+      "start": 0
+    }
+  ],
+  "speaker_separation": "not_provided",
+  "confidence_notes": {
+    "possible_missed_words": false,
+    "mixed_language_detected": false,
+    "noisy_audio_suspected": false,
+    "reason": null
+  }
+}
+
+Rules:
+- Break the transcript into logical segments (by topic shift or natural pause points)
+- Keep segment text faithful to the original — do NOT remove filler words
+- speaker_separation should be "provided" only if you can clearly identify multiple speakers, otherwise "not_provided"
+- If speaker_separation is "not_provided", use "Speaker" for all segments
+- start times should increment (use 0 for first segment, estimate reasonable intervals)
+- Return ONLY valid JSON, no markdown or extra text`,
+          },
+          {
+            role: 'user',
+            content: `Here is the transcript:\n\n${transcript}`,
+          },
+        ],
+        temperature: 0.3,
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+      }),
+    ])
+
+    const summary = summaryResult.choices[0]?.message?.content || ''
+    const structuredTranscript = structuredTranscriptResult.choices[0]?.message?.content || ''
+
+    console.log('Successfully generated outputs')
+
+    return res.json({ summary, structuredTranscript })
+  } catch (error) {
+    console.error('Error generating outputs:', error)
+
+    if (error?.status === 401) {
+      return res.status(401).json({ error: 'Invalid API key. Please check your OpenAI API key.' })
+    }
+    if (error?.status === 429) {
+      return res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' })
+    }
+
+    return res.status(500).json({ error: error?.message || 'Failed to generate outputs' })
+  }
+})
+
 // Generate recording title endpoint
 app.post('/api/generate-title', express.json(), async (req, res) => {
   try {

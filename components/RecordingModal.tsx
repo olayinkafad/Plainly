@@ -9,7 +9,7 @@ import Icon from './Icon'
 import { Title, Body } from './typography'
 import { Recording, recordingsStore } from '../store/recordings'
 import { themeLight } from '../constants/theme'
-import { processRecording, generateRecordingTitle } from '../lib/api'
+import { transcribeAudio, generateOutputs, generateRecordingTitle } from '../lib/api'
 import { StructuredSummary, StructuredTranscript } from '../types'
 
 interface RecordingModalProps {
@@ -23,13 +23,13 @@ type RecordingState = 'idle' | 'recording' | 'paused'
 const WAVEFORM_BAR_COUNT = 25
 
 const PROCESSING_STEPS = [
-  'Listening back',
-  'Transcribing',
-  'Summarizing',
-  'Finishing touches',
+  'Sending your recording',
+  'Cleaning up your words',
+  'Pulling out what matters',
+  'Wrapping up',
 ]
 
-const STEP_MIN_TIMES = [2000, 2000, 2000, 1500]
+const STEP_MIN_TIMES = [1500, 2000, 2000, 1000]
 
 // Pre-computed static bar heights for visual variety (taller in center, shorter at edges)
 const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
@@ -64,19 +64,22 @@ export default function RecordingModal({
   const [phase, setPhase] = useState<'recording' | 'processing'>('recording')
   const [activeStep, setActiveStep] = useState(-1)
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set())
+  const [processingError, setProcessingError] = useState<string | null>(null)
   const savedRecordingIdRef = useRef<string | null>(null)
   const savedAudioUriRef = useRef<string | null>(null)
 
   // API processing state
-  const apiCompleteRef = useRef(false)
   const apiResultRef = useRef<{
     transcript: string
     summary: StructuredSummary | string
     structuredTranscript: StructuredTranscript | string
   } | null>(null)
   const apiErrorRef = useRef<string | null>(null)
-  const stepResolverRef = useRef<(() => void) | null>(null)
   const processingAbortedRef = useRef(false)
+
+  // Step resolvers: each step waits for its resolver to be called
+  const stepResolversRef = useRef<Array<(() => void) | null>>([null, null, null, null])
+  const stepResolvedRef = useRef<boolean[]>([false, false, false, false])
 
   // Phase crossfade animations
   const recordingViewOpacity = useRef(new Animated.Value(1)).current
@@ -108,14 +111,15 @@ export default function RecordingModal({
     setPhase('recording')
     setActiveStep(-1)
     setCompletedSteps(new Set())
+    setProcessingError(null)
     savedRecordingIdRef.current = null
     savedAudioUriRef.current = null
 
     // Reset API state
-    apiCompleteRef.current = false
     apiResultRef.current = null
     apiErrorRef.current = null
-    stepResolverRef.current = null
+    stepResolversRef.current = [null, null, null, null]
+    stepResolvedRef.current = [false, false, false, false]
     processingAbortedRef.current = false
 
     // Reset crossfade
@@ -499,56 +503,98 @@ export default function RecordingModal({
     ]).start()
   }
 
+  // Resolve a step (called by the API pipeline when a stage completes)
+  const resolveStep = (stepIndex: number) => {
+    stepResolvedRef.current[stepIndex] = true
+    const resolver = stepResolversRef.current[stepIndex]
+    if (resolver) {
+      resolver()
+      stepResolversRef.current[stepIndex] = null
+    }
+  }
+
+  // Wait for a step to be resolved by the API pipeline
+  const waitForStepResolution = (stepIndex: number) =>
+    new Promise<void>((resolve) => {
+      if (stepResolvedRef.current[stepIndex]) {
+        resolve()
+      } else {
+        stepResolversRef.current[stepIndex] = resolve
+      }
+    })
+
   const callProcessingAPI = async () => {
     const audioUri = savedAudioUriRef.current
     if (!audioUri) {
       apiErrorRef.current = 'No audio URI available'
-      apiCompleteRef.current = true
+      // Resolve all remaining steps so the sequence can finish
+      for (let i = 0; i < PROCESSING_STEPS.length; i++) resolveStep(i)
       return
     }
 
     try {
-      const result = await processRecording(audioUri)
+      // Step 0: "Sending your recording" — completes when upload/transcription request finishes
+      const transcribeResult = await transcribeAudio(audioUri)
 
       if (processingAbortedRef.current) return
 
-      if (result.error) {
-        apiErrorRef.current = result.error
-        apiCompleteRef.current = true
-        // Release last step if waiting
-        if (stepResolverRef.current) stepResolverRef.current()
+      // Step 0 done (audio sent and transcript received)
+      resolveStep(0)
+
+      if (transcribeResult.error) {
+        apiErrorRef.current = transcribeResult.error
+        // Resolve remaining steps to unblock sequence
+        for (let i = 1; i < PROCESSING_STEPS.length; i++) resolveStep(i)
+        return
+      }
+
+      // Step 1: "Cleaning up your words" — transcription is already done, mark complete
+      resolveStep(1)
+
+      if (processingAbortedRef.current) return
+
+      // Step 2: "Pulling out what matters" — generate outputs from transcript
+      const outputsResult = await generateOutputs(transcribeResult.transcript)
+
+      if (processingAbortedRef.current) return
+
+      if (outputsResult.error) {
+        apiErrorRef.current = outputsResult.error
+        resolveStep(2)
+        resolveStep(3)
         return
       }
 
       // Parse structured outputs
       let parsedSummary: StructuredSummary | string
       try {
-        parsedSummary = JSON.parse(result.summary)
+        parsedSummary = JSON.parse(outputsResult.summary)
       } catch {
-        parsedSummary = result.summary
+        parsedSummary = outputsResult.summary
       }
 
       let parsedTranscript: StructuredTranscript | string
       try {
-        parsedTranscript = JSON.parse(result.structuredTranscript)
+        parsedTranscript = JSON.parse(outputsResult.structuredTranscript)
       } catch {
-        parsedTranscript = result.structuredTranscript
+        parsedTranscript = outputsResult.structuredTranscript
       }
 
       apiResultRef.current = {
-        transcript: result.transcript,
+        transcript: transcribeResult.transcript,
         summary: parsedSummary,
         structuredTranscript: parsedTranscript,
       }
-      apiCompleteRef.current = true
 
-      // Release last step if waiting
-      if (stepResolverRef.current) stepResolverRef.current()
+      // Step 2 done (outputs generated)
+      resolveStep(2)
+
+      // Step 3: "Wrapping up" — resolved immediately, actual save happens in finishProcessing
+      resolveStep(3)
     } catch (error) {
       if (processingAbortedRef.current) return
       apiErrorRef.current = error instanceof Error ? error.message : 'Failed to process recording'
-      apiCompleteRef.current = true
-      if (stepResolverRef.current) stepResolverRef.current()
+      for (let i = 0; i < PROCESSING_STEPS.length; i++) resolveStep(i)
     }
   }
 
@@ -558,21 +604,11 @@ export default function RecordingModal({
 
       activateStepAnim(i)
 
-      // Wait minimum display time for this step
-      await delay(STEP_MIN_TIMES[i])
-
-      if (processingAbortedRef.current) return
-
-      // For the last step, also wait for API completion
-      if (i === PROCESSING_STEPS.length - 1 && !apiCompleteRef.current) {
-        await new Promise<void>((resolve) => {
-          stepResolverRef.current = resolve
-          // Safety: check if API already completed while we were setting up
-          if (apiCompleteRef.current) {
-            resolve()
-          }
-        })
-      }
+      // Wait for BOTH: minimum display time AND actual API stage completion
+      await Promise.all([
+        delay(STEP_MIN_TIMES[i]),
+        waitForStepResolution(i),
+      ])
 
       if (processingAbortedRef.current) return
 
@@ -597,10 +633,10 @@ export default function RecordingModal({
   const startProcessingPhase = () => {
     setPhase('processing')
     processingAbortedRef.current = false
-    apiCompleteRef.current = false
     apiResultRef.current = null
     apiErrorRef.current = null
-    stepResolverRef.current = null
+    stepResolversRef.current = [null, null, null, null]
+    stepResolvedRef.current = [false, false, false, false]
 
     // Crossfade: recording out, processing in
     Animated.parallel([
@@ -621,30 +657,47 @@ export default function RecordingModal({
     })
   }
 
+  const handleRetryProcessing = () => {
+    setProcessingError(null)
+    setActiveStep(-1)
+    setCompletedSteps(new Set())
+
+    // Reset API state
+    apiResultRef.current = null
+    apiErrorRef.current = null
+    processingAbortedRef.current = false
+    stepResolversRef.current = [null, null, null, null]
+    stepResolvedRef.current = [false, false, false, false]
+
+    // Reset step animations
+    stepAnims.forEach(s => {
+      s.opacity.setValue(0)
+      s.translateY.setValue(12)
+      s.checkScale.setValue(0)
+    })
+    dotScales.forEach(d => d.setValue(0.6))
+
+    // Re-run step sequence and API call
+    runStepSequence()
+    callProcessingAPI()
+  }
+
   const finishProcessing = async () => {
     const savedId = savedRecordingIdRef.current
 
     // Check for API errors
     if (apiErrorRef.current) {
-      resetProcessingState()
-      setDuration(0)
-      onClose()
-
-      if (savedId) {
-        if (apiErrorRef.current.includes('No speech detected')) {
-          // Navigate to result screen to show empty state
-          setTimeout(() => {
-            router.replace(`/recordings/${savedId}`)
-          }, 300)
-        } else {
-          // Navigate to generating screen for error display/retry
-          setTimeout(() => {
-            router.push({
-              pathname: '/generating',
-              params: { recordingId: savedId, errorMessage: apiErrorRef.current! },
-            })
-          }, 300)
-        }
+      if (savedId && apiErrorRef.current?.includes('No speech detected')) {
+        // Navigate to result screen to show empty state
+        resetProcessingState()
+        setDuration(0)
+        onClose()
+        setTimeout(() => {
+          router.replace(`/recordings/${savedId}`)
+        }, 300)
+      } else {
+        // Show error inline within the processing view
+        setProcessingError(apiErrorRef.current || 'Something went wrong. Please try again.')
       }
       return
     }
@@ -689,7 +742,7 @@ export default function RecordingModal({
   // ── Close actions ──
 
   const handleClose = () => {
-    if (phase === 'processing') return // Cannot cancel during processing
+    if (phase === 'processing' && !processingError) return // Cannot cancel during processing (unless error shown)
     if (hasRecording && (recordingState === 'recording' || recordingState === 'paused')) {
       setShowCloseSheet(true)
     } else {
@@ -853,56 +906,79 @@ export default function RecordingModal({
             pointerEvents={phase === 'processing' ? 'auto' : 'none'}
           >
             <View style={styles.processingContainer}>
-              <View style={styles.stepsGroup}>
-                {PROCESSING_STEPS.map((label, i) => {
-                  if (i > activeStep) return null
-                  const isCompleted = completedSteps.has(i)
-                  return (
-                    <Animated.View
-                      key={i}
-                      style={[
-                        styles.stepRow,
-                        i > 0 && styles.stepRowSpacing,
-                        {
-                          opacity: stepAnims[i].opacity,
-                          transform: [{ translateY: stepAnims[i].translateY }],
-                        },
-                      ]}
-                    >
-                      {/* Indicator */}
-                      <View style={styles.stepIndicator}>
-                        {isCompleted ? (
-                          <Animated.View
-                            style={[
-                              styles.checkCircle,
-                              { transform: [{ scale: stepAnims[i].checkScale }] },
-                            ]}
-                          >
-                            <Icon name="check" size={14} color="#FFFFFF" />
-                          </Animated.View>
-                        ) : (
-                          <View style={styles.dotRow}>
-                            {dotScales.map((dotScale, di) => (
-                              <Animated.View
-                                key={di}
-                                style={[
-                                  styles.dot,
-                                  { transform: [{ scale: dotScale }] },
-                                ]}
-                              />
-                            ))}
-                          </View>
-                        )}
-                      </View>
+              {processingError ? (
+                <View style={styles.processingErrorContainer}>
+                  <Title style={styles.processingErrorTitle}>Something went wrong</Title>
+                  <Body style={styles.processingErrorBody}>{processingError}</Body>
+                  <Pressable
+                    style={({ pressed }) => [styles.processingRetryButton, pressed && { opacity: 0.8 }]}
+                    onPress={handleRetryProcessing}
+                  >
+                    <Body style={styles.processingRetryText}>Try again</Body>
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [styles.processingBackButton, pressed && { opacity: 0.8 }]}
+                    onPress={() => {
+                      resetProcessingState()
+                      setDuration(0)
+                      onClose()
+                    }}
+                  >
+                    <Body style={styles.processingBackText}>Go back</Body>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.stepsGroup}>
+                  {PROCESSING_STEPS.map((label, i) => {
+                    if (i > activeStep) return null
+                    const isCompleted = completedSteps.has(i)
+                    return (
+                      <Animated.View
+                        key={i}
+                        style={[
+                          styles.stepRow,
+                          i > 0 && styles.stepRowSpacing,
+                          {
+                            opacity: stepAnims[i].opacity,
+                            transform: [{ translateY: stepAnims[i].translateY }],
+                          },
+                        ]}
+                      >
+                        {/* Indicator */}
+                        <View style={styles.stepIndicator}>
+                          {isCompleted ? (
+                            <Animated.View
+                              style={[
+                                styles.checkCircle,
+                                { transform: [{ scale: stepAnims[i].checkScale }] },
+                              ]}
+                            >
+                              <Icon name="check" size={14} color="#FFFFFF" />
+                            </Animated.View>
+                          ) : (
+                            <View style={styles.dotRow}>
+                              {dotScales.map((dotScale, di) => (
+                                <Animated.View
+                                  key={di}
+                                  style={[
+                                    styles.dot,
+                                    { transform: [{ scale: dotScale }] },
+                                  ]}
+                                />
+                              ))}
+                            </View>
+                          )}
+                        </View>
 
-                      {/* Label */}
-                      <Body style={isCompleted ? styles.stepTextCompleted : styles.stepTextActive}>
-                        {label}
-                      </Body>
-                    </Animated.View>
-                  )
-                })}
-              </View>
+                        {/* Label */}
+                        <Body style={isCompleted ? styles.stepTextCompleted : styles.stepTextActive}>
+                          {label}
+                        </Body>
+                      </Animated.View>
+                    )
+                  })}
+                </View>
+              )}
             </View>
           </Animated.View>
         </Animated.View>
@@ -1150,6 +1226,54 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: themeLight.textPrimary,
     marginLeft: 12,
+  },
+
+  // ── Processing Error ──
+  processingErrorContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  processingErrorTitle: {
+    fontSize: 24,
+    color: themeLight.textPrimary,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  processingErrorBody: {
+    fontSize: 14,
+    color: themeLight.textSecondary,
+    textAlign: 'center',
+    marginBottom: 28,
+    paddingHorizontal: 16,
+  },
+  processingRetryButton: {
+    backgroundColor: themeLight.accent,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 26,
+    width: '100%',
+    maxWidth: 280,
+    alignItems: 'center',
+  },
+  processingRetryText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  processingBackButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 26,
+    width: '100%',
+    maxWidth: 280,
+    alignItems: 'center',
+    marginTop: 12,
+    backgroundColor: themeLight.bgSecondary,
+  },
+  processingBackText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
+    color: themeLight.textPrimary,
   },
 
   // ── Close Action Sheet ──

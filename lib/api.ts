@@ -65,7 +65,7 @@ export async function processRecording(
   } catch (error) {
     console.error('Error processing recording:', error)
 
-    if (error instanceof TypeError && error.message.includes('Network')) {
+    if (error instanceof TypeError && error.message?.includes('Network')) {
       return {
         transcript: '',
         summary: '',
@@ -80,6 +80,92 @@ export async function processRecording(
       structuredTranscript: '',
       error: error instanceof Error ? error.message : 'Failed to process recording',
     }
+  }
+}
+
+export interface TranscribeResponse {
+  transcript: string
+  error?: string
+}
+
+export interface GenerateOutputsResponse {
+  summary: string
+  structuredTranscript: string
+  error?: string
+}
+
+/**
+ * Stage 1: Send audio to backend for transcription
+ */
+export async function transcribeAudio(audioUri: string): Promise<TranscribeResponse> {
+  try {
+    const formData = new FormData()
+    const extension = audioUri.split('.').pop()?.toLowerCase() || 'm4a'
+    const mimeType = getMimeType(extension)
+    const filename = `recording.${extension}`
+
+    formData.append('audio', {
+      uri: audioUri,
+      type: mimeType,
+      name: filename,
+    } as any)
+
+    const response = await fetch(API_ENDPOINTS.transcribe, {
+      method: 'POST',
+      body: formData,
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      return { transcript: '', error: `Server error: ${response.status}` }
+    }
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return { transcript: '', error: data.error || `Server error: ${response.status}` }
+    }
+
+    return { transcript: data.transcript || '' }
+  } catch (error) {
+    if (error instanceof TypeError && error.message?.includes('Network')) {
+      return { transcript: '', error: 'Unable to connect to server. Please check your connection.' }
+    }
+    return { transcript: '', error: error instanceof Error ? error.message : 'Failed to transcribe' }
+  }
+}
+
+/**
+ * Stage 2: Send transcript to backend for summary + structured transcript generation
+ */
+export async function generateOutputs(transcript: string): Promise<GenerateOutputsResponse> {
+  try {
+    const response = await fetch(API_ENDPOINTS.generateOutputs, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript }),
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      return { summary: '', structuredTranscript: '', error: `Server error: ${response.status}` }
+    }
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return { summary: '', structuredTranscript: '', error: data.error || `Server error: ${response.status}` }
+    }
+
+    return {
+      summary: data.summary || '',
+      structuredTranscript: data.structuredTranscript || '',
+    }
+  } catch (error) {
+    if (error instanceof TypeError && error.message?.includes('Network')) {
+      return { summary: '', structuredTranscript: '', error: 'Unable to connect to server. Please check your connection.' }
+    }
+    return { summary: '', structuredTranscript: '', error: error instanceof Error ? error.message : 'Failed to generate outputs' }
   }
 }
 

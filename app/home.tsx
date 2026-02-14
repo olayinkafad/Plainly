@@ -21,7 +21,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 export default function Home() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const params = useLocalSearchParams<{ startRecording?: string }>()
+  const params = useLocalSearchParams<{ startRecording?: string; deleted?: string }>()
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null)
@@ -31,6 +31,11 @@ export default function Home() {
   const [showToast, setShowToast] = useState(false)
   const [showMicPermission, setShowMicPermission] = useState(false)
   const toastAnim = useRef(new Animated.Value(0)).current
+
+  // Deleted toast state
+  const [showDeletedToast, setShowDeletedToast] = useState(false)
+  const deletedToastAnim = useRef(new Animated.Value(0)).current
+  const deletedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Mini Player State ──
   const SPEED_OPTIONS = [1, 1.5, 2, 0.5] as const
@@ -54,6 +59,16 @@ export default function Home() {
       setShowRecordingModal(true)
     }
   }, [params.startRecording])
+
+  // Show deleted toast when arriving from result screen after deletion
+  useEffect(() => {
+    if (params.deleted === '1') {
+      showDeletedToastNotification()
+    }
+    return () => {
+      if (deletedToastTimerRef.current) clearTimeout(deletedToastTimerRef.current)
+    }
+  }, [params.deleted])
 
   // Cleanup sound on unmount
   useEffect(() => {
@@ -131,6 +146,27 @@ export default function Home() {
     }, 3000)
   }
 
+  const showDeletedToastNotification = () => {
+    if (deletedToastTimerRef.current) clearTimeout(deletedToastTimerRef.current)
+    setShowDeletedToast(true)
+    deletedToastAnim.setValue(0)
+    Animated.timing(deletedToastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+
+    deletedToastTimerRef.current = setTimeout(() => {
+      Animated.timing(deletedToastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowDeletedToast(false)
+      })
+    }, 2000)
+  }
+
   const handleRecordingPress = (id: string) => {
     router.push(`/recordings/${id}`)
   }
@@ -170,6 +206,7 @@ export default function Home() {
       await loadRecordings()
       setShowActionsSheet(false)
       setSelectedRecordingId(null)
+      showDeletedToastNotification()
     } catch (error) {
       console.error('Failed to delete recording:', error)
     }
@@ -425,6 +462,29 @@ export default function Home() {
             <Icon name="check" size={20} color="#FFFFFF" />
             <Body style={styles.toastText}>Your recording has been saved</Body>
           </View>
+        </Animated.View>
+      )}
+
+      {/* Deleted Toast */}
+      {showDeletedToast && (
+        <Animated.View
+          style={[
+            styles.deletedToast,
+            {
+              opacity: deletedToastAnim,
+              transform: [
+                {
+                  translateY: deletedToastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Body style={styles.deletedToastText}>Deleted</Body>
         </Animated.View>
       )}
 
@@ -874,5 +934,29 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_500Medium',
+  },
+
+  // ── Deleted Toast ──
+  deletedToast: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: themeLight.textPrimary,
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  deletedToastText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFFFFF',
   },
 })

@@ -490,7 +490,7 @@ export default function RecordingDetail() {
     if (!recording) return
     try {
       await recordingsStore.delete(recording.id)
-      router.push('/home')
+      router.push('/home?deleted=1')
     } catch (error) {
       console.error('Failed to delete recording:', error)
     }

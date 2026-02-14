@@ -6,7 +6,7 @@ import { Title, Body } from '../components/typography'
 import { recordingsStore } from '../store/recordings'
 import { StructuredTranscript, StructuredSummary } from '../types'
 import Button from '../components/Button'
-import { processRecording } from '../lib/api'
+import { transcribeAudio, generateOutputs } from '../lib/api'
 import { themeLight } from '../constants/theme'
 
 /**
@@ -44,22 +44,32 @@ export default function Generating() {
         return
       }
 
-      const result = await processRecording(recording.audioBlobUrl)
+      // Stage 1: Transcribe
+      const transcribeResult = await transcribeAudio(recording.audioBlobUrl)
 
-      if (result.error) {
-        if (result.error.includes('No speech detected')) {
+      if (transcribeResult.error) {
+        if (transcribeResult.error?.includes('No speech detected')) {
           router.replace(`/recordings/${recordingId}`)
           return
         }
-        setError(result.error)
+        setError(transcribeResult.error)
+        setRetrying(false)
+        return
+      }
+
+      // Stage 2: Generate outputs
+      const outputsResult = await generateOutputs(transcribeResult.transcript)
+
+      if (outputsResult.error) {
+        setError(outputsResult.error)
         setRetrying(false)
         return
       }
 
       // Parse summary
-      let summary: StructuredSummary | string = result.summary
+      let summary: StructuredSummary | string = outputsResult.summary
       try {
-        const parsed = JSON.parse(result.summary)
+        const parsed = JSON.parse(outputsResult.summary)
         if (parsed.format === 'summary' && parsed.one_line && Array.isArray(parsed.key_takeaways)) {
           summary = parsed as StructuredSummary
         }
@@ -68,9 +78,9 @@ export default function Generating() {
       }
 
       // Parse structured transcript
-      let transcript: StructuredTranscript | string = result.structuredTranscript
+      let transcript: StructuredTranscript | string = outputsResult.structuredTranscript
       try {
-        const parsed = JSON.parse(result.structuredTranscript)
+        const parsed = JSON.parse(outputsResult.structuredTranscript)
         if (parsed.format === 'transcript' && Array.isArray(parsed.segments)) {
           transcript = parsed as StructuredTranscript
         }
