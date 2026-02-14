@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { View, StyleSheet, ScrollView, Pressable, Share, Alert, Animated, Text } from 'react-native'
+import { View, StyleSheet, ScrollView, Pressable, Share, Alert, Animated, Text, Modal } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -15,7 +15,6 @@ import RenameModal from '../../components/RenameModal'
 import { generateRecordingTitle } from '../../lib/api'
 import TranscriptDisplay from '../../components/TranscriptDisplay'
 import SummaryDisplay from '../../components/SummaryDisplay'
-import FormatActionSheet from '../../components/FormatActionSheet'
 import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput } from '../../types'
 import { themeLight } from '../../constants/theme'
 
@@ -35,8 +34,12 @@ export default function RecordingDetail() {
   const [activeFormat, setActiveFormat] = useState<OutputType>('summary')
   const [showActionsSheet, setShowActionsSheet] = useState(false)
   const [showRenameModal, setShowRenameModal] = useState(false)
-  const [showFormatActionSheet, setShowFormatActionSheet] = useState(false)
-  const [formatActionType, setFormatActionType] = useState<'copy' | 'share' | null>(null)
+  const [showCopySheet, setShowCopySheet] = useState(false)
+
+  // Copied toast state
+  const [showCopiedToast, setShowCopiedToast] = useState(false)
+  const copiedToastAnim = useRef(new Animated.Value(0)).current
+  const copiedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasAutoTitledRef = useRef(false)
 
   // Toast state
@@ -60,6 +63,7 @@ export default function RecordingDetail() {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       if (tooltipDelayRef.current) clearTimeout(tooltipDelayRef.current)
+      if (copiedToastTimerRef.current) clearTimeout(copiedToastTimerRef.current)
     }
   }, [id])
 
@@ -317,43 +321,80 @@ export default function RecordingDetail() {
     return null
   }
 
-  const handleCopy = () => {
-    setFormatActionType('copy')
-    setShowFormatActionSheet(true)
+  const showCopiedFeedback = () => {
+    if (copiedToastTimerRef.current) clearTimeout(copiedToastTimerRef.current)
+    setShowCopiedToast(true)
+    copiedToastAnim.setValue(0)
+    Animated.timing(copiedToastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+
+    copiedToastTimerRef.current = setTimeout(() => {
+      Animated.timing(copiedToastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowCopiedToast(false)
+      })
+    }, 1500)
   }
 
-  const handleCopyFormat = async (fmt: OutputType) => {
-    if (!recording) return
+  const handleCopy = () => {
+    setShowCopySheet(true)
+  }
 
-    const text = getActiveFormatText(fmt, recording.outputs)
-    if (!text || !text.trim()) return
+  const handleCopyFormat = async (fmt: 'summary' | 'transcript' | 'both') => {
+    if (!recording) return
+    setShowCopySheet(false)
 
     try {
+      let text = ''
+      if (fmt === 'both') {
+        const summaryText = getActiveFormatText('summary', recording.outputs)
+        const transcriptText = getActiveFormatText('transcript', recording.outputs)
+        const parts: string[] = []
+        if (summaryText.trim()) {
+          parts.push('Summary\n' + summaryText)
+        }
+        if (transcriptText.trim()) {
+          parts.push('Transcript\n' + transcriptText)
+        }
+        text = parts.join('\n\n---\n\n')
+      } else {
+        text = getActiveFormatText(fmt, recording.outputs)
+      }
+
+      if (!text.trim()) return
       await Clipboard.setStringAsync(text)
-      const formatTitle = formatOptions.find(opt => opt.key === fmt)?.title || 'content'
-      Alert.alert('Copied', `Copied ${formatTitle.toLowerCase()}`)
+      showCopiedFeedback()
     } catch (error) {
       console.error('Failed to copy:', error)
-      Alert.alert('Error', 'Failed to copy text')
     }
   }
 
-  const handleShare = () => {
-    setFormatActionType('share')
-    setShowFormatActionSheet(true)
-  }
-
-  const handleShareFormat = async (fmt: OutputType) => {
+  const handleShare = async () => {
     if (!recording) return
 
-    const text = getActiveFormatText(fmt, recording.outputs)
-    if (!text || !text.trim()) return
+    const title = formatRecordingTitle(recording)
+    const dateStr = format(recording.createdAt, 'MMM d · h:mm a')
+    const summaryText = getActiveFormatText('summary', recording.outputs)
+
+    const parts: string[] = []
+    parts.push(title)
+    parts.push(dateStr)
+    if (summaryText.trim()) {
+      parts.push('')
+      parts.push(summaryText)
+    }
+    parts.push('')
+    parts.push('Captured with Plainly')
 
     try {
-      const formatTitle = formatOptions.find(opt => opt.key === fmt)?.title || 'Content'
       await Share.share({
-        message: text,
-        title: `Plainly — ${formatTitle}`,
+        message: parts.join('\n'),
       })
     } catch (error) {
       console.error('Failed to share:', error)
@@ -483,13 +524,6 @@ export default function RecordingDetail() {
 
   const output = recording.outputs[activeFormat]
   const availableFormats = getAvailableFormats(recording)
-  const formatsWithOutputs = formatOptions
-    .map((opt) => opt.key)
-    .filter((key) => {
-      const formatOutput = recording.outputs[key]
-      return formatOutput && !isFormatUnavailable(key, formatOutput)
-    })
-
   const renderTabs = (onPress?: (fmt: OutputType) => void) => (
     <View style={styles.tabsRow}>
       {availableFormats.map((formatKey) => {
@@ -693,24 +727,66 @@ export default function RecordingDetail() {
         onClose={() => setShowRenameModal(false)}
       />
 
-      {/* Format Action Sheet */}
-      {formatActionType && (
-        <FormatActionSheet
-          isOpen={showFormatActionSheet}
-          actionType={formatActionType}
-          availableFormats={formatsWithOutputs}
-          onSelect={(fmt) => {
-            if (formatActionType === 'copy') {
-              handleCopyFormat(fmt)
-            } else if (formatActionType === 'share') {
-              handleShareFormat(fmt)
-            }
-          }}
-          onClose={() => {
-            setShowFormatActionSheet(false)
-            setFormatActionType(null)
-          }}
-        />
+      {/* Copy Sheet */}
+      {showCopySheet && (
+        <Modal
+          visible={showCopySheet}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowCopySheet(false)}
+        >
+          <Pressable style={styles.copySheetOverlay} onPress={() => setShowCopySheet(false)}>
+            <View style={[styles.copySheetCard, { paddingBottom: insets.bottom + 16 }]}>
+              <Pressable>
+                {/* Header */}
+                <View style={styles.copySheetHeader}>
+                  <View style={styles.copySheetHeaderContent}>
+                    <Body style={styles.copySheetTitle}>{formatRecordingTitle(recording)}</Body>
+                    <Pressable onPress={() => setShowCopySheet(false)} style={styles.copySheetCloseButton}>
+                      <Icon name="x" size={20} color={themeLight.textSecondary} />
+                    </Pressable>
+                  </View>
+                </View>
+
+                {/* Actions */}
+                <View style={styles.copySheetActions}>
+                  <Pressable style={styles.copySheetActionItem} onPress={() => handleCopyFormat('summary')}>
+                    <Icon name="clipboard-text" size={20} color={themeLight.textSecondary} />
+                    <Body style={styles.copySheetActionText}>Copy summary</Body>
+                  </Pressable>
+                  <Pressable style={styles.copySheetActionItem} onPress={() => handleCopyFormat('transcript')}>
+                    <Icon name="clipboard-text" size={20} color={themeLight.textSecondary} />
+                    <Body style={styles.copySheetActionText}>Copy transcript</Body>
+                  </Pressable>
+                </View>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Copied Toast */}
+      {showCopiedToast && (
+        <Animated.View
+          style={[
+            styles.copiedToast,
+            {
+              opacity: copiedToastAnim,
+              transform: [
+                {
+                  translateY: copiedToastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Body style={styles.copiedToastText}>Copied</Body>
+          <Icon name="check" size={16} color="#FFFFFF" />
+        </Animated.View>
       )}
     </SafeAreaView>
   )
@@ -960,5 +1036,81 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_600SemiBold',
     color: themeLight.textPrimary,
+  },
+
+  // Copy sheet
+  copySheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  copySheetCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    maxHeight: '80%',
+  },
+  copySheetHeader: {
+    marginBottom: 16,
+  },
+  copySheetHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  copySheetTitle: {
+    flex: 1,
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 16,
+    color: themeLight.textPrimary,
+  },
+  copySheetCloseButton: {
+    padding: 8,
+    borderRadius: 20,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copySheetActions: {
+    gap: 8,
+  },
+  copySheetActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 12,
+  },
+  copySheetActionText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: themeLight.textPrimary,
+  },
+
+  // Copied toast
+  copiedToast: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: themeLight.success,
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    gap: 8,
+    zIndex: 4000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  copiedToastText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFFFFF',
   },
 })
