@@ -43,6 +43,10 @@ const fileTextIcon = require('../assets/icons/file-text.svg')
 const sparkleIcon = require('../assets/icons/sparkle.svg')
 const usersIcon = require('../assets/icons/users.svg')
 const plantIcon = require('../assets/icons/plant.svg')
+const lightbulbIcon = require('../assets/icons/lightbulb.svg')
+const notebookIcon = require('../assets/icons/notebook.svg')
+const clipboardTextIcon = require('../assets/icons/clipboard-text.svg')
+const chatsIcon = require('../assets/icons/chats.svg')
 
 // Helper to extract React component from require result
 const extractComponent = (module: any): React.ComponentType<SvgProps> | null => {
@@ -120,6 +124,18 @@ const iconRegistry: IconRegistry = {
   },
   'plant': {
     regular: extractComponent(plantIcon) || plantIcon.default || plantIcon,
+  },
+  'lightbulb': {
+    regular: extractComponent(lightbulbIcon) || lightbulbIcon.default || lightbulbIcon,
+  },
+  'notebook': {
+    regular: extractComponent(notebookIcon) || notebookIcon.default || notebookIcon,
+  },
+  'clipboard-text': {
+    regular: extractComponent(clipboardTextIcon) || clipboardTextIcon.default || clipboardTextIcon,
+  },
+  'chats': {
+    regular: extractComponent(chatsIcon) || chatsIcon.default || chatsIcon,
   },
 }
 

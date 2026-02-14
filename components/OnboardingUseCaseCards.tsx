@@ -1,125 +1,192 @@
-import { View, StyleSheet } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { View, StyleSheet, Animated, Easing, Text } from 'react-native'
 import Icon from './Icon'
-import { Title, Body } from './typography'
 
-const CARD_ICON_BG = {
-  meetings: '#DBEAFE',   // soft blue
-  ideas: '#FEF3C7',     // warm yellow
-  reflections: '#D1FAE5', // green
-  todos: '#FCE7F3',     // pink
-} as const
 
-const CARD_ICON_COLOR = {
-  meetings: '#2563EB',
-  ideas: '#B45309',
-  reflections: '#047857',
-  todos: '#BE185D',
-} as const
+const BUBBLE_RADIUS = 18
+const ICON_BOX_SIZE = 36
+const ICON_BOX_RADIUS = 10
+const ICON_SIZE = 19
 
-const cards: {
-  key: keyof typeof CARD_ICON_BG
-  icon: string
+const FLOAT_DISTANCE = 9
+const FLOAT_DURATION = 5500
+const FLOAT_DELAYS = [0, 1000, 2000, 500, 1500]
+
+const DOT_SIZE = 5
+const DOT_COLOR = 'rgba(43, 107, 242, 0.1)'
+
+type BubbleKey = 'meetings' | 'ideas' | 'reflections' | 'todos' | 'conversations'
+
+const BUBBLE_BG: Record<BubbleKey, string> = {
+  meetings: '#EEF3FF',
+  ideas: '#FFF8E6',
+  reflections: '#EEFBF0',
+  todos: '#FFF0F5',
+  conversations: '#F0EDFF',
+}
+
+const BUBBLE_ICON_COLOR: Record<BubbleKey, string> = {
+  meetings: '#4A6CF7',
+  ideas: '#C4941C',
+  reflections: '#1A8B4C',
+  todos: '#C43D6B',
+  conversations: '#6B5DD3',
+}
+
+const bubbles: {
+  key: BubbleKey
   label: string
-  description: string
+  icon: string
+  large: boolean
+  leftPercent: number
+  topPercent: number
 }[] = [
-  {
-    key: 'meetings',
-    icon: 'users',
-    label: 'Meetings',
-    description: 'Capture what was said without taking notes',
-  },
-  {
-    key: 'ideas',
-    icon: 'sparkle',
-    label: 'Ideas',
-    description: 'Get it down before you forget',
-  },
-  {
-    key: 'reflections',
-    icon: 'plant',
-    label: 'Reflections',
-    description: 'Think out loud and make sense of it later',
-  },
-  {
-    key: 'todos',
-    icon: 'check',
-    label: 'To-dos',
-    description: 'Say it, and Plainly writes it down for you',
-  },
+  { key: 'meetings', label: 'Meetings', icon: 'users', large: true, leftPercent: 8, topPercent: 12 },
+  { key: 'ideas', label: 'Ideas', icon: 'lightbulb', large: false, leftPercent: 58, topPercent: 18 },
+  { key: 'reflections', label: 'Reflections', icon: 'notebook', large: false, leftPercent: 6, topPercent: 48 },
+  { key: 'todos', label: 'To-dos', icon: 'clipboard-text', large: true, leftPercent: 52, topPercent: 52 },
+  { key: 'conversations', label: 'Conversations', icon: 'chats', large: false, leftPercent: 28, topPercent: 78 },
+]
+
+const connectorDots: Array<{ leftPercent: number; topPercent: number }> = [
+  { leftPercent: 32, topPercent: 28 },
+  { leftPercent: 22, topPercent: 72 },
+  { leftPercent: 72, topPercent: 38 },
+  { leftPercent: 48, topPercent: 68 },
+  { leftPercent: 38, topPercent: 42 },
 ]
 
 export default function OnboardingUseCaseCards() {
+  const floatAnims = useRef(
+    bubbles.map(() => new Animated.Value(0))
+  ).current
+
+  useEffect(() => {
+    const loops = floatAnims.map((val, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(FLOAT_DELAYS[i]),
+          Animated.timing(val, {
+            toValue: 1,
+            duration: FLOAT_DURATION / 2,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(val, {
+            toValue: 0,
+            duration: FLOAT_DURATION / 2,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    )
+    const composite = Animated.parallel(loops)
+    composite.start()
+    return () => composite.stop()
+  }, [floatAnims])
+
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.grid}>
-        {cards.map((card) => (
-        <View key={card.key} style={styles.card}>
-          <View
+    <View style={styles.container}>
+      {/* Connector dots */}
+      {connectorDots.map((dot, i) => (
+        <View
+          key={i}
+          style={[
+            styles.dot,
+            {
+              left: `${dot.leftPercent}%`,
+              top: `${dot.topPercent}%`,
+            },
+          ]}
+        />
+      ))}
+
+      {/* Floating bubbles */}
+      {bubbles.map((bubble, i) => {
+        const translateY = floatAnims[i].interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, -FLOAT_DISTANCE],
+        })
+        return (
+          <Animated.View
+            key={bubble.key}
             style={[
-              styles.iconBox,
-              { backgroundColor: CARD_ICON_BG[card.key] },
+              styles.bubble,
+              bubble.large ? styles.bubbleLarge : styles.bubbleSmall,
+              {
+                left: `${bubble.leftPercent}%`,
+                top: `${bubble.topPercent}%`,
+                transform: [{ translateY }],
+              },
             ]}
           >
-            <Icon
-              name={card.icon as 'users' | 'sparkle' | 'plant' | 'check'}
-              size={20}
-              color={CARD_ICON_COLOR[card.key]}
-            />
-          </View>
-          <Title style={styles.label}>{card.label}</Title>
-          <Body style={styles.description}>{card.description}</Body>
-        </View>
-      ))}
-      </View>
+            <View
+              style={[
+                styles.iconBox,
+                { backgroundColor: BUBBLE_BG[bubble.key] },
+              ]}
+            >
+              <Icon
+                name={bubble.icon as 'users' | 'lightbulb' | 'notebook' | 'clipboard-text' | 'chats'}
+                size={ICON_SIZE}
+                color={BUBBLE_ICON_COLOR[bubble.key]}
+              />
+            </View>
+            <Text style={styles.label}>{bubble.label}</Text>
+          </Animated.View>
+        )
+      })}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  container: {
+    width: '100%',
     flex: 1,
-    width: '100%',
-    padding: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: 'relative',
   },
-  grid: {
+  dot: {
+    position: 'absolute',
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    borderRadius: DOT_SIZE / 2,
+    backgroundColor: DOT_COLOR,
+  },
+  bubble: {
+    position: 'absolute',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    width: '100%',
-    maxWidth: 320,
-    justifyContent: 'center',
     alignItems: 'center',
-    alignContent: 'center',
-  },
-  card: {
-    width: '47%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: BUBBLE_RADIUS,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  bubbleLarge: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    gap: 10,
+  },
+  bubbleSmall: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 8,
   },
   iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: ICON_BOX_SIZE,
+    height: ICON_BOX_SIZE,
+    borderRadius: ICON_BOX_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
   label: {
-    fontSize: 14,
-    color: '#111827',
-    marginBottom: 2,
-  },
-  description: {
-    fontSize: 12,
-    color: '#6B7280',
-    lineHeight: 17,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    fontFamily: 'Satoshi-Medium',
   },
 })
