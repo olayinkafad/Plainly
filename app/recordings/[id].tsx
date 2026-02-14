@@ -558,7 +558,7 @@ export default function RecordingDetail() {
       </View>
 
       {/* Format Tabs */}
-      <View style={styles.tabsContainer} onLayout={handleTabsLayout}>
+      <View style={[styles.tabsContainer, showTooltip && styles.tabsHidden]} onLayout={handleTabsLayout}>
         {renderTabs()}
       </View>
 
@@ -777,6 +777,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
   },
+  tabsHidden: {
+    opacity: 0,
+  },
   tabsRow: {
     flexDirection: 'row',
     gap: 8,
@@ -905,6 +908,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 12,
     fontFamily: 'PlusJakartaSans_400Regular',
+    textAlign: 'center',
   },
   tooltipBold: {
     fontFamily: 'PlusJakartaSans_700Bold',
