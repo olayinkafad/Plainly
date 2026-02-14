@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated, AccessibilityInfo } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
+import { Audio } from 'expo-av'
 import Icon from '../components/Icon'
 import { format } from 'date-fns'
 import { Title, Body, Meta } from '../components/typography'
@@ -11,6 +13,7 @@ import RecordingActionsSheet from '../components/RecordingActionsSheet'
 import RecordingModal from '../components/RecordingModal'
 import FormatSelectionModal from '../components/FormatSelectionModal'
 import RenameModal from '../components/RenameModal'
+import MicPermissionSheet from '../components/MicPermissionSheet'
 import { themeLight } from '../constants/theme'
 
 export default function Home() {
@@ -26,10 +29,11 @@ export default function Home() {
   const [showFormatSelection, setShowFormatSelection] = useState(false)
   const [formatSelectionRecordingId, setFormatSelectionRecordingId] = useState<string | null>(null)
   const [showToast, setShowToast] = useState(false)
+  const [showMicPermission, setShowMicPermission] = useState(false)
   const toastAnim = useRef(new Animated.Value(0)).current
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
-  
-  // Pulse ring animations
+
+  // Pulse ring animations (list state)
   const ring1Anim = useRef(new Animated.Value(0)).current
   const ring2Anim = useRef(new Animated.Value(0)).current
 
@@ -43,7 +47,7 @@ export default function Home() {
     return () => subscription.remove()
   }, [])
 
-  // Pulse ring animation
+  // Pulse ring animation (only used in list state bottom)
   useEffect(() => {
     if (prefersReducedMotion) {
       ring1Anim.setValue(0)
@@ -69,7 +73,6 @@ export default function Home() {
       )
     }
 
-    // Reset values before starting
     ring1Anim.setValue(0)
     ring2Anim.setValue(0)
 
@@ -123,15 +126,27 @@ export default function Home() {
     }
   }
 
-  const handleRecord = () => {
+  const handleRecord = async () => {
+    const { status } = await Audio.getPermissionsAsync()
+    if (status === 'undetermined') {
+      setShowMicPermission(true)
+      return
+    }
     setShowRecordingModal(true)
+  }
+
+  const handleMicPermissionContinue = async () => {
+    setShowMicPermission(false)
+    const { status } = await Audio.requestPermissionsAsync()
+    if (status === 'granted') {
+      setShowRecordingModal(true)
+    }
   }
 
   const handleSaveRecording = async (recording: Recording, showToast: boolean = true) => {
     try {
       await recordingsStore.add(recording)
       await loadRecordings()
-      // Show toast notification only if requested
       if (showToast) {
         showToastNotification()
       }
@@ -149,7 +164,6 @@ export default function Home() {
       friction: 11,
     }).start()
 
-    // Auto-hide after 3 seconds
     setTimeout(() => {
       Animated.timing(toastAnim, {
         toValue: 0,
@@ -167,11 +181,8 @@ export default function Home() {
   }
 
   const handleGenerate = (recordingId: string, format: OutputType) => {
-    // Close format selection modal
     setShowFormatSelection(false)
     setFormatSelectionRecordingId(null)
-    
-    // Navigate to generating screen
     router.push({
       pathname: '/generating',
       params: { recordingId, format },
@@ -272,37 +283,63 @@ export default function Home() {
         </Animated.View>
       )}
 
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Title style={styles.logo}>Plainly</Title>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <Title style={styles.headerTitle}>Plainly</Title>
+      </View>
 
-        {recordings.length === 0 ? (
-          /* Empty State */
-          <View style={styles.emptyState}>
-            <View style={styles.emptyContent}>
-              <Title style={styles.emptyTitle}>What's on your mind?</Title>
-              <Body style={styles.emptySubtext}>
-                Record your voice notes and Plainly will turn them into summaries, action items and transcripts.
-              </Body>
+      {recordings.length === 0 ? (
+        /* ── Empty State ── */
+        <View style={styles.emptyWrapper}>
+          {/* bg-secondary content area — fills remaining height */}
+          <View style={styles.emptyContentArea}>
+            <Title style={styles.emptyTitle}>What's on your mind?</Title>
+            <Body style={styles.emptySubtext}>
+              Your recordings will show up here.
+            </Body>
 
-              {/* Illustration */}
-              <View style={styles.illustrationContainer}>
-                <Image
-                  source={require('../assets/images/first-time-user-avatar.png')}
-                  style={styles.illustrationImage}
-                  resizeMode="contain"
-                />
-              </View>
+            {/* Illustration */}
+            <View style={styles.illustrationContainer}>
+              <Image
+                source={require('../assets/images/first-time-user-avatar.png')}
+                style={styles.illustrationImage}
+                resizeMode="contain"
+              />
             </View>
           </View>
-        ) : (
-          /* Recordings List State */
-          <View style={styles.listContainer}>
+
+          {/* Bottom overlay — gradient fade + hint + mic */}
+          <View
+            style={styles.emptyBottom}
+            pointerEvents="box-none"
+          >
+            <LinearGradient
+              colors={['rgba(253, 252, 251, 0)', themeLight.bgPrimary]}
+              style={styles.gradientFade}
+            />
+            <View style={[styles.emptyBottomInner, { paddingBottom: insets.bottom + 28 }]} pointerEvents="auto">
+              <Body style={styles.hintText}>Tap the microphone to record</Body>
+              <Pressable
+                onPress={handleRecord}
+                accessibilityLabel="Record your first voice note"
+                accessibilityRole="button"
+              >
+                <View style={styles.micOuterRing}>
+                  <View style={styles.micButton}>
+                    <Icon name="microphone" size={28} color="#FFFFFF" />
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : (
+        /* ── Recordings List State ── */
+        <>
+          <View style={styles.listWrapper}>
             <Title style={styles.sectionTitle}>
-              {recordings.length === 1 
-                ? 'Your recording (1)' 
+              {recordings.length === 1
+                ? 'Your recording (1)'
                 : `Your recordings (${recordings.length})`}
             </Title>
             <FlatList
@@ -335,89 +372,84 @@ export default function Home() {
               )}
               contentContainerStyle={[
                 styles.listContent,
-                { paddingBottom: 120 + insets.bottom }, // Space for bottom buttons
+                { paddingBottom: 120 + insets.bottom },
               ]}
             />
           </View>
-        )}
-      </View>
 
-      {/* Persistent Bottom Action Area */}
-      <SafeAreaView edges={['bottom']} style={styles.bottomActionAreaContainer}>
-        <View style={[styles.bottomActionArea, { paddingBottom: insets.bottom + 16, paddingTop: 16 }]}>
-          <Pressable
-            style={styles.ctaContainer}
-            onPress={handleRecord}
-            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-            accessibilityLabel={recordings.length === 0 ? "Record your first voice note" : "Record your voice note"}
-            accessibilityRole="button"
-          >
-            {/* Label card - at the top */}
-            <View style={styles.labelCard}>
-              <Body style={styles.labelText}>
-                {recordings.length === 0 ? 'Record your first voice note' : 'Record your voice note'}
-              </Body>
+          {/* List state bottom — pulse ring mic */}
+          <SafeAreaView edges={['bottom']} style={styles.bottomActionAreaContainer}>
+            <View style={[styles.bottomActionArea, { paddingBottom: insets.bottom + 16, paddingTop: 16 }]}>
+              <Pressable
+                style={styles.ctaContainer}
+                onPress={handleRecord}
+                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                accessibilityLabel="Record your voice note"
+                accessibilityRole="button"
+              >
+                <View style={styles.labelCard}>
+                  <Body style={styles.labelText}>Record your voice note</Body>
+                </View>
+                <View style={styles.pulseContainer}>
+                  {!prefersReducedMotion && (
+                    <>
+                      <Animated.View
+                        style={[
+                          styles.pulseRing,
+                          {
+                            transform: [{ scale: ring1Scale }],
+                            opacity: ring1Opacity,
+                          },
+                        ]}
+                      />
+                      <Animated.View
+                        style={[
+                          styles.pulseRing,
+                          {
+                            transform: [{ scale: ring2Scale }],
+                            opacity: ring2Opacity,
+                          },
+                        ]}
+                      />
+                    </>
+                  )}
+                  <View style={styles.solidCircle}>
+                    <Icon name="microphone" size={28} color="#FFFFFF" />
+                  </View>
+                </View>
+              </Pressable>
             </View>
-            {/* Pulse rings */}
-            <View style={styles.pulseContainer}>
-              {!prefersReducedMotion && (
-                <>
-                  <Animated.View
-                    style={[
-                      styles.pulseRing,
-                      {
-                        transform: [{ scale: ring1Scale }],
-                        opacity: ring1Opacity,
-                      },
-                    ]}
-                  />
-                  <Animated.View
-                    style={[
-                      styles.pulseRing,
-                      {
-                        transform: [{ scale: ring2Scale }],
-                        opacity: ring2Opacity,
-                      },
-                    ]}
-                  />
-                </>
-              )}
-              {/* Solid circle */}
-              <View style={styles.solidCircle}>
-                <Icon name="microphone" size={28} color="#FFFFFF" />
-              </View>
-            </View>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+          </SafeAreaView>
+        </>
+      )}
 
-          {/* Actions Sheet Modal */}
-          {selectedRecording && (
-            <RecordingActionsSheet
-              isOpen={showActionsSheet}
-              recordingTitle={selectedRecording.title}
-              audioUri={selectedRecording.audioBlobUrl}
-              onRename={handleRename}
-              onDelete={() => handleDeleteRecording(selectedRecording.id)}
-              onClose={() => {
-                setShowActionsSheet(false)
-                setSelectedRecordingId(null)
-              }}
-            />
-          )}
+      {/* Actions Sheet Modal */}
+      {selectedRecording && (
+        <RecordingActionsSheet
+          isOpen={showActionsSheet}
+          recordingTitle={selectedRecording.title}
+          audioUri={selectedRecording.audioBlobUrl}
+          onRename={handleRename}
+          onDelete={() => handleDeleteRecording(selectedRecording.id)}
+          onClose={() => {
+            setShowActionsSheet(false)
+            setSelectedRecordingId(null)
+          }}
+        />
+      )}
 
-          {/* Rename Modal */}
-          {selectedRecording && (
-            <RenameModal
-              isOpen={showRenameModal}
-              currentTitle={selectedRecording.title || format(selectedRecording.createdAt, 'MMM d, yyyy')}
-              onSave={handleSaveRename}
-              onClose={() => {
-                setShowRenameModal(false)
-                setSelectedRecordingId(null)
-              }}
-            />
-          )}
+      {/* Rename Modal */}
+      {selectedRecording && (
+        <RenameModal
+          isOpen={showRenameModal}
+          currentTitle={selectedRecording.title || format(selectedRecording.createdAt, 'MMM d, yyyy')}
+          onSave={handleSaveRename}
+          onClose={() => {
+            setShowRenameModal(false)
+            setSelectedRecordingId(null)
+          }}
+        />
+      )}
 
       {/* Recording Modal */}
       <RecordingModal
@@ -439,6 +471,13 @@ export default function Home() {
           onGenerate={handleGenerate}
         />
       )}
+
+      {/* Mic Permission Sheet */}
+      <MicPermissionSheet
+        isOpen={showMicPermission}
+        onContinue={handleMicPermissionContinue}
+        onClose={() => setShowMicPermission(false)}
+      />
     </SafeAreaView>
   )
 }
@@ -448,128 +487,111 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: themeLight.bgPrimary,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16, // --space-4
-    maxWidth: 420,
-    width: '100%',
-    alignSelf: 'center',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // Header
+
+  // ── Header ──
   header: {
-    paddingTop: 24, // --space-6
-    paddingBottom: 16, // --space-4
-  },
-  logo: {
-    fontSize: 20,
-    color: themeLight.textPrimary,
-    marginBottom: 8, // --space-2
-  },
-  // Empty State
-  emptyState: {
-    flex: 1,
-    marginTop: 32,
-  },
-  emptyContent: {
-    flex: 1,
-    justifyContent: 'flex-end',
+    paddingTop: 16, // --space-4
+    paddingBottom: 12, // --space-3
     alignItems: 'center',
-    paddingBottom: 8,
+  },
+  headerTitle: {
+    fontSize: 24, // --font-size-xl
+    color: themeLight.textPrimary,
+    textAlign: 'center',
+  },
+
+  // ── Empty State ──
+  emptyWrapper: {
+    flex: 1,
+  },
+  emptyContentArea: {
+    flex: 1,
+    backgroundColor: themeLight.bgSecondary,
+    alignItems: 'center',
+    paddingHorizontal: 24, // --space-6
   },
   emptyTitle: {
+    fontSize: 22,
     textAlign: 'center',
-    marginBottom: 12, // --space-3
     color: themeLight.textPrimary,
+    marginTop: 40,
   },
   emptySubtext: {
+    fontSize: 15,
     textAlign: 'center',
     color: themeLight.textSecondary,
-    marginBottom: 12,
+    marginTop: 8, // --space-2
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
   illustrationContainer: {
     width: '100%',
-    maxWidth: 200,
+    maxWidth: 240,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginTop: 32, // --space-8
   },
   illustrationImage: {
     width: '100%',
     height: '100%',
   },
-  bottomActionAreaContainer: {
-    backgroundColor: themeLight.bgPrimary,
-    borderTopWidth: 1,
-    borderTopColor: themeLight.border,
-  },
-  bottomActionArea: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    paddingHorizontal: 16, // --space-4
-    alignItems: 'center',
-  },
-  ctaContainer: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16, // --space-4
-    width: '100%',
-    minHeight: 120, // Ensures a large enough touch target
-  },
-  pulseContainer: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  pulseRing: {
+
+  // ── Empty State Bottom Overlay ──
+  emptyBottom: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: themeLight.accent,
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
-  solidCircle: {
+  gradientFade: {
+    height: 80,
+  },
+  emptyBottomInner: {
+    backgroundColor: themeLight.bgPrimary,
+    alignItems: 'center',
+    paddingTop: 0,
+  },
+  hintText: {
+    fontSize: 14, // --font-size-sm
+    color: themeLight.textTertiary,
+    textAlign: 'center',
+    marginBottom: 16, // --space-4
+    fontFamily: 'PlusJakartaSans_400Regular',
+  },
+  micOuterRing: {
     width: 80,
     height: 80,
     borderRadius: 40,
+    backgroundColor: themeLight.accentSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1,
+    shadowColor: 'rgba(196, 93, 62, 1)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 8,
   },
-  labelCard: {
-    backgroundColor: themeLight.bgSecondary,
-    paddingHorizontal: 16, // --space-4
-    paddingVertical: 12, // --space-3
-    borderRadius: 10, // --radius-md
-    borderWidth: 1,
-    borderColor: themeLight.border,
-    shadowColor: themeLight.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  labelText: {
-    color: themeLight.textPrimary,
-    fontSize: 14, // --font-size-sm
-    fontWeight: '500', // --font-weight-medium
-  },
-  // Recordings List State
-  listContainer: {
+
+  // ── List State ──
+  listWrapper: {
     flex: 1,
+    paddingHorizontal: 16, // --space-4
+    maxWidth: 420,
+    width: '100%',
+    alignSelf: 'center',
   },
   sectionTitle: {
     marginBottom: 16, // --space-4
@@ -609,6 +631,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // ── List State Bottom (pulse rings) ──
+  bottomActionAreaContainer: {
+    backgroundColor: themeLight.bgPrimary,
+    borderTopWidth: 1,
+    borderTopColor: themeLight.border,
+  },
+  bottomActionArea: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    paddingHorizontal: 16, // --space-4
+    alignItems: 'center',
+  },
+  ctaContainer: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16, // --space-4
+    width: '100%',
+    minHeight: 120,
+  },
+  pulseContainer: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  pulseRing: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: themeLight.accent,
+  },
+  solidCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: themeLight.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  labelCard: {
+    backgroundColor: themeLight.bgSecondary,
+    paddingHorizontal: 16, // --space-4
+    paddingVertical: 12, // --space-3
+    borderRadius: 10, // --radius-md
+    borderWidth: 1,
+    borderColor: themeLight.border,
+    shadowColor: themeLight.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  labelText: {
+    color: themeLight.textPrimary,
+    fontSize: 14, // --font-size-sm
+    fontWeight: '500',
+  },
+
+  // ── Toast ──
   toastContainer: {
     position: 'absolute',
     left: 16,
@@ -625,10 +712,7 @@ const styles = StyleSheet.create({
     borderRadius: 10, // --radius-md
     gap: 8, // --space-2
     shadowColor: themeLight.shadow,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
