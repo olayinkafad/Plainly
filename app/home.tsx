@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated, AccessibilityInfo } from 'react-native'
+import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated, LayoutAnimation, Platform, UIManager } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -14,6 +14,10 @@ import RenameModal from '../components/RenameModal'
 import MicPermissionSheet from '../components/MicPermissionSheet'
 import { themeLight } from '../constants/theme'
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true)
+}
+
 export default function Home() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
@@ -27,82 +31,20 @@ export default function Home() {
   const [showToast, setShowToast] = useState(false)
   const [showMicPermission, setShowMicPermission] = useState(false)
   const toastAnim = useRef(new Animated.Value(0)).current
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
 
-  // Pulse ring animations (list state)
-  const ring1Anim = useRef(new Animated.Value(0)).current
-  const ring2Anim = useRef(new Animated.Value(0)).current
+  // ── Mini Player State ──
+  const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null)
+  const [miniPlayerSound, setMiniPlayerSound] = useState<Audio.Sound | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackPosition, setPlaybackPosition] = useState(0)
+  const [playbackDuration, setPlaybackDuration] = useState(0)
+  const [miniPlayerVisible, setMiniPlayerVisible] = useState(false)
+  const positionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const scrubberWidthRef = useRef(200)
 
   useEffect(() => {
     loadRecordings()
   }, [])
-
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled().then(setPrefersReducedMotion)
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setPrefersReducedMotion)
-    return () => subscription.remove()
-  }, [])
-
-  // Pulse ring animation (only used in list state bottom)
-  useEffect(() => {
-    if (prefersReducedMotion) {
-      ring1Anim.setValue(0)
-      ring2Anim.setValue(0)
-      return
-    }
-
-    const createRingAnimation = (animValue: Animated.Value, delay: number) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(animValue, {
-            toValue: 1,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(animValue, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ])
-      )
-    }
-
-    ring1Anim.setValue(0)
-    ring2Anim.setValue(0)
-
-    const ring1Animation = createRingAnimation(ring1Anim, 0)
-    const ring2Animation = createRingAnimation(ring2Anim, 700)
-
-    ring1Animation.start()
-    ring2Animation.start()
-
-    return () => {
-      ring1Animation.stop()
-      ring2Animation.stop()
-    }
-  }, [prefersReducedMotion, ring1Anim, ring2Anim])
-
-  const ring1Scale = ring1Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.8],
-  })
-
-  const ring1Opacity = ring1Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.25, 0],
-  })
-
-  const ring2Scale = ring2Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.8],
-  })
-
-  const ring2Opacity = ring2Anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.25, 0],
-  })
 
   // Auto-open recording modal if coming from onboarding
   useEffect(() => {
@@ -110,6 +52,18 @@ export default function Home() {
       setShowRecordingModal(true)
     }
   }, [params.startRecording])
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return () => {
+      if (miniPlayerSound) {
+        miniPlayerSound.unloadAsync().catch(console.error)
+      }
+      if (positionIntervalRef.current) {
+        clearInterval(positionIntervalRef.current)
+      }
+    }
+  }, [miniPlayerSound])
 
   const loadRecordings = async () => {
     try {
@@ -123,6 +77,10 @@ export default function Home() {
   }
 
   const handleRecord = async () => {
+    // Close mini player if open
+    if (miniPlayerVisible) {
+      closeMiniPlayer()
+    }
     const { status } = await Audio.getPermissionsAsync()
     if (status === 'undetermined') {
       setShowMicPermission(true)
@@ -178,11 +136,6 @@ export default function Home() {
     })
   }
 
-  const handleUpload = () => {
-    // TODO: Implement upload
-    Alert.alert('Upload', 'Upload coming soon')
-  }
-
   const handleRecordingPress = (id: string) => {
     router.push(`/recordings/${id}`)
   }
@@ -212,6 +165,10 @@ export default function Home() {
 
   const handleDeleteRecording = async (id: string) => {
     try {
+      // Close mini player if this recording is playing
+      if (playingRecordingId === id) {
+        closeMiniPlayer()
+      }
       await recordingsStore.delete(id)
       await loadRecordings()
       setShowActionsSheet(false)
@@ -232,6 +189,168 @@ export default function Home() {
     return `${minutes}:${secs.toString().padStart(2, '0')}`
   }
 
+  const formatTimeMs = (millis: number): string => {
+    const totalSeconds = Math.floor(millis / 1000)
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  // ── Mini Player Functions ──
+
+  const loadAndPlayRecording = async (rec: Recording) => {
+    // If same recording, just toggle
+    if (playingRecordingId === rec.id && miniPlayerSound) {
+      togglePlayback()
+      return
+    }
+
+    // Unload previous
+    if (miniPlayerSound) {
+      try {
+        await miniPlayerSound.stopAsync()
+        await miniPlayerSound.unloadAsync()
+      } catch (e) {
+        // Ignore
+      }
+      if (positionIntervalRef.current) {
+        clearInterval(positionIntervalRef.current)
+        positionIntervalRef.current = null
+      }
+    }
+
+    try {
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      })
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: rec.audioBlobUrl },
+        { shouldPlay: true }
+      )
+
+      const status = await newSound.getStatusAsync()
+      if (status.isLoaded) {
+        setPlaybackDuration(status.durationMillis || rec.durationSec * 1000)
+      }
+
+      newSound.setOnPlaybackStatusUpdate((s) => {
+        if (s.isLoaded) {
+          setPlaybackPosition(s.positionMillis || 0)
+          if (s.didJustFinish) {
+            setIsPlaying(false)
+            setPlaybackPosition(0)
+            newSound.setPositionAsync(0).catch(console.error)
+            if (positionIntervalRef.current) {
+              clearInterval(positionIntervalRef.current)
+              positionIntervalRef.current = null
+            }
+          }
+        }
+      })
+
+      setMiniPlayerSound(newSound)
+      setPlayingRecordingId(rec.id)
+      setIsPlaying(true)
+      setPlaybackPosition(0)
+
+      if (!miniPlayerVisible) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+        setMiniPlayerVisible(true)
+      }
+
+      // Position polling
+      positionIntervalRef.current = setInterval(async () => {
+        try {
+          const currentStatus = await newSound.getStatusAsync()
+          if (currentStatus.isLoaded) {
+            setPlaybackPosition(currentStatus.positionMillis || 0)
+          }
+        } catch (e) {
+          // Ignore
+        }
+      }, 100)
+    } catch (error) {
+      console.error('Failed to load audio:', error)
+    }
+  }
+
+  const togglePlayback = async () => {
+    if (!miniPlayerSound) return
+    try {
+      if (isPlaying) {
+        await miniPlayerSound.pauseAsync()
+        setIsPlaying(false)
+        if (positionIntervalRef.current) {
+          clearInterval(positionIntervalRef.current)
+          positionIntervalRef.current = null
+        }
+      } else {
+        const status = await miniPlayerSound.getStatusAsync()
+        if (status.isLoaded) {
+          const pos = status.positionMillis || 0
+          const dur = status.durationMillis || playbackDuration
+          if (pos >= dur - 100) {
+            await miniPlayerSound.setPositionAsync(0)
+            setPlaybackPosition(0)
+          }
+        }
+        await miniPlayerSound.playAsync()
+        setIsPlaying(true)
+        if (!positionIntervalRef.current) {
+          positionIntervalRef.current = setInterval(async () => {
+            try {
+              const s = await miniPlayerSound.getStatusAsync()
+              if (s.isLoaded) {
+                setPlaybackPosition(s.positionMillis || 0)
+              }
+            } catch (e) {
+              // Ignore
+            }
+          }, 100)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle playback:', error)
+    }
+  }
+
+  const handleScrubberPress = async (event: any) => {
+    if (!miniPlayerSound) return
+    try {
+      const { locationX } = event.nativeEvent
+      const pct = locationX / scrubberWidthRef.current
+      const newPos = pct * playbackDuration
+      await miniPlayerSound.setPositionAsync(Math.max(0, Math.min(newPos, playbackDuration)))
+      setPlaybackPosition(Math.max(0, Math.min(newPos, playbackDuration)))
+    } catch (error) {
+      console.error('Failed to scrub:', error)
+    }
+  }
+
+  const closeMiniPlayer = async () => {
+    if (miniPlayerSound) {
+      try {
+        await miniPlayerSound.stopAsync()
+        await miniPlayerSound.unloadAsync()
+      } catch (e) {
+        // Ignore
+      }
+    }
+    if (positionIntervalRef.current) {
+      clearInterval(positionIntervalRef.current)
+      positionIntervalRef.current = null
+    }
+    setMiniPlayerSound(null)
+    setPlayingRecordingId(null)
+    setIsPlaying(false)
+    setPlaybackPosition(0)
+    setPlaybackDuration(0)
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+    setMiniPlayerVisible(false)
+  }
+
   const selectedRecording = recordings.find((r) => r.id === selectedRecordingId)
 
   if (loading) {
@@ -250,6 +369,30 @@ export default function Home() {
   })
 
   const toastOpacity = toastAnim
+
+  // ── Shared bottom section (used in both empty and list states) ──
+  const renderBottomSection = () => (
+    <View style={styles.bottomOverlay} pointerEvents="box-none">
+      <LinearGradient
+        colors={['rgba(253, 252, 251, 0)', themeLight.bgPrimary]}
+        style={styles.gradientFade}
+      />
+      <View style={[styles.bottomInner, { paddingBottom: insets.bottom + 28 }]} pointerEvents="auto">
+        <Body style={styles.hintText}>Tap the microphone to record</Body>
+        <Pressable
+          onPress={handleRecord}
+          accessibilityLabel="Record your voice note"
+          accessibilityRole="button"
+        >
+          <View style={styles.micOuterRing}>
+            <View style={styles.micButton}>
+              <Icon name="microphone" size={28} color="#FFFFFF" />
+            </View>
+          </View>
+        </Pressable>
+      </View>
+    </View>
+  )
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -279,15 +422,12 @@ export default function Home() {
 
       {recordings.length === 0 ? (
         /* ── Empty State ── */
-        <View style={styles.emptyWrapper}>
-          {/* bg-secondary content area — fills remaining height */}
-          <View style={styles.emptyContentArea}>
+        <View style={styles.contentWrapper}>
+          <View style={styles.contentArea}>
             <Title style={styles.emptyTitle}>What's on your mind?</Title>
             <Body style={styles.emptySubtext}>
               Your recordings will show up here.
             </Body>
-
-            {/* Illustration */}
             <View style={styles.illustrationContainer}>
               <Image
                 source={require('../assets/images/first-time-user-avatar.png')}
@@ -296,120 +436,100 @@ export default function Home() {
               />
             </View>
           </View>
-
-          {/* Bottom overlay — gradient fade + hint + mic */}
-          <View
-            style={styles.emptyBottom}
-            pointerEvents="box-none"
-          >
-            <LinearGradient
-              colors={['rgba(253, 252, 251, 0)', themeLight.bgPrimary]}
-              style={styles.gradientFade}
-            />
-            <View style={[styles.emptyBottomInner, { paddingBottom: insets.bottom + 28 }]} pointerEvents="auto">
-              <Body style={styles.hintText}>Tap the microphone to record</Body>
-              <Pressable
-                onPress={handleRecord}
-                accessibilityLabel="Record your first voice note"
-                accessibilityRole="button"
-              >
-                <View style={styles.micOuterRing}>
-                  <View style={styles.micButton}>
-                    <Icon name="microphone" size={28} color="#FFFFFF" />
-                  </View>
-                </View>
-              </Pressable>
-            </View>
-          </View>
+          {renderBottomSection()}
         </View>
       ) : (
-        /* ── Recordings List State ── */
-        <>
-          <View style={styles.listWrapper}>
-            <Title style={styles.sectionTitle}>
-              {recordings.length === 1
-                ? 'Your recording (1)'
-                : `Your recordings (${recordings.length})`}
-            </Title>
+        /* ── List State ── */
+        <View style={styles.contentWrapper}>
+          <View style={styles.contentArea}>
+            {/* Mini Audio Player */}
+            {miniPlayerVisible && (
+              <View style={styles.miniPlayer}>
+                <Pressable style={styles.miniPlayButton} onPress={togglePlayback}>
+                  <Icon name={isPlaying ? 'pause' : 'play'} size={16} color="#FFFFFF" />
+                </Pressable>
+                <Body style={[styles.miniTimeText, { marginLeft: 12 }]}>
+                  {formatTimeMs(playbackPosition)}
+                </Body>
+                <Pressable
+                  style={styles.miniProgressTrack}
+                  onPress={handleScrubberPress}
+                  onLayout={(e) => { scrubberWidthRef.current = e.nativeEvent.layout.width }}
+                >
+                  <View
+                    style={[
+                      styles.miniProgressFill,
+                      { width: `${playbackDuration > 0 ? (playbackPosition / playbackDuration) * 100 : 0}%` },
+                    ]}
+                  />
+                </Pressable>
+                <Body style={styles.miniTimeText}>
+                  {formatTimeMs(playbackDuration)}
+                </Body>
+                <Body style={styles.miniSpeedLabel}>1x</Body>
+                <Pressable
+                  style={styles.miniCloseButton}
+                  onPress={closeMiniPlayer}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon name="x" size={20} color={themeLight.textSecondary} />
+                </Pressable>
+              </View>
+            )}
+
+            {/* Section Label */}
+            <View style={styles.sectionLabelRow}>
+              <Body style={styles.sectionLabel}>Recordings </Body>
+              <Body style={styles.sectionCount}>({recordings.length})</Body>
+            </View>
+
+            {/* Recording Cards */}
             <FlatList
               data={recordings}
               keyExtractor={(item) => item.id}
               renderItem={({ item }) => (
-                <View style={styles.recordingRow}>
+                <Pressable
+                  style={styles.card}
+                  onPress={() => handleRecordingPress(item.id)}
+                >
+                  <View style={styles.cardHeader}>
+                    <Body style={styles.cardTitle} numberOfLines={2}>{item.title}</Body>
+                    <Pressable
+                      style={styles.cardEllipsis}
+                      onPress={(e) => {
+                        e?.stopPropagation?.()
+                        handleEllipsisPress(item.id)
+                      }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Icon name="dots-three-vertical" size={20} color={themeLight.textSecondary} />
+                    </Pressable>
+                  </View>
+                  <Body style={styles.cardMeta}>
+                    {format(item.createdAt, 'MMM d')} · {format(item.createdAt, 'h:mm a')} · {formatDuration(item.durationSec)}
+                  </Body>
                   <Pressable
-                    style={styles.recordingRowContent}
-                    onPress={() => handleRecordingPress(item.id)}
-                  >
-                    <View style={styles.recordingContent}>
-                      <Title style={styles.recordingTitle}>{item.title}</Title>
-                      <Meta style={styles.recordingMeta}>
-                        {format(item.createdAt, 'MMM d · h:mm a')} · {formatDuration(item.durationSec)}
-                      </Meta>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    style={styles.ellipsisButton}
+                    style={styles.replayButton}
                     onPress={(e) => {
                       e?.stopPropagation?.()
-                      handleEllipsisPress(item.id)
+                      loadAndPlayRecording(item)
                     }}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Icon name="dots-three-vertical" size={20} color={themeLight.textSecondary} />
+                    <Body style={styles.replayButtonText}>Replay voice note</Body>
+                    <Icon name="play" size={12} color="#FFFFFF" />
                   </Pressable>
-                </View>
+                </Pressable>
               )}
+              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
               contentContainerStyle={[
-                styles.listContent,
-                { paddingBottom: 120 + insets.bottom },
+                styles.cardList,
+                { paddingBottom: 140 + insets.bottom },
               ]}
+              showsVerticalScrollIndicator={false}
             />
           </View>
-
-          {/* List state bottom — pulse ring mic */}
-          <SafeAreaView edges={['bottom']} style={styles.bottomActionAreaContainer}>
-            <View style={[styles.bottomActionArea, { paddingBottom: insets.bottom + 16, paddingTop: 16 }]}>
-              <Pressable
-                style={styles.ctaContainer}
-                onPress={handleRecord}
-                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-                accessibilityLabel="Record your voice note"
-                accessibilityRole="button"
-              >
-                <View style={styles.labelCard}>
-                  <Body style={styles.labelText}>Record your voice note</Body>
-                </View>
-                <View style={styles.pulseContainer}>
-                  {!prefersReducedMotion && (
-                    <>
-                      <Animated.View
-                        style={[
-                          styles.pulseRing,
-                          {
-                            transform: [{ scale: ring1Scale }],
-                            opacity: ring1Opacity,
-                          },
-                        ]}
-                      />
-                      <Animated.View
-                        style={[
-                          styles.pulseRing,
-                          {
-                            transform: [{ scale: ring2Scale }],
-                            opacity: ring2Opacity,
-                          },
-                        ]}
-                      />
-                    </>
-                  )}
-                  <View style={styles.solidCircle}>
-                    <Icon name="microphone" size={28} color="#FFFFFF" />
-                  </View>
-                </View>
-              </Pressable>
-            </View>
-          </SafeAreaView>
-        </>
+          {renderBottomSection()}
+        </View>
       )}
 
       {/* Actions Sheet Modal */}
@@ -471,26 +591,26 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   header: {
-    paddingTop: 16, // --space-4
-    paddingBottom: 12, // --space-3
+    paddingTop: 16,
+    paddingBottom: 12,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24, // --font-size-xl
+    fontSize: 24,
     color: themeLight.textPrimary,
     textAlign: 'center',
   },
 
-  // ── Empty State ──
-  emptyWrapper: {
+  // ── Shared Layout ──
+  contentWrapper: {
     flex: 1,
   },
-  emptyContentArea: {
+  contentArea: {
     flex: 1,
     backgroundColor: themeLight.bgSecondary,
-    alignItems: 'center',
-    paddingHorizontal: 24, // --space-6
   },
+
+  // ── Empty State ──
   emptyTitle: {
     fontSize: 22,
     textAlign: 'center',
@@ -501,7 +621,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     color: themeLight.textSecondary,
-    marginTop: 8, // --space-2
+    marginTop: 8,
     fontFamily: 'PlusJakartaSans_400Regular',
   },
   illustrationContainer: {
@@ -510,15 +630,16 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 32, // --space-8
+    marginTop: 32,
+    alignSelf: 'center',
   },
   illustrationImage: {
     width: '100%',
     height: '100%',
   },
 
-  // ── Empty State Bottom Overlay ──
-  emptyBottom: {
+  // ── Bottom Overlay (shared) ──
+  bottomOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -527,16 +648,16 @@ const styles = StyleSheet.create({
   gradientFade: {
     height: 80,
   },
-  emptyBottomInner: {
+  bottomInner: {
     backgroundColor: themeLight.bgPrimary,
     alignItems: 'center',
     paddingTop: 0,
   },
   hintText: {
-    fontSize: 14, // --font-size-sm
+    fontSize: 14,
     color: themeLight.textTertiary,
     textAlign: 'center',
-    marginBottom: 16, // --space-4
+    marginBottom: 16,
     fontFamily: 'PlusJakartaSans_400Regular',
   },
   micOuterRing: {
@@ -561,114 +682,128 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 
-  // ── List State ──
-  listWrapper: {
-    flex: 1,
-    paddingHorizontal: 16, // --space-4
-    maxWidth: 420,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  sectionTitle: {
-    marginBottom: 16, // --space-4
-    color: themeLight.textPrimary,
-  },
-  listContent: {
-    paddingBottom: 16,
-  },
-  recordingRow: {
+  // ── Section Label ──
+  sectionLabelRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: themeLight.border,
+    alignItems: 'baseline',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    marginBottom: 12,
   },
-  recordingRowContent: {
-    flex: 1,
-    paddingVertical: 16, // --space-4
-  },
-  recordingContent: {
-    flex: 1,
-    marginRight: 12, // --space-3
-  },
-  recordingTitle: {
-    fontSize: 16,
-    marginBottom: 4,
+  sectionLabel: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 20,
     color: themeLight.textPrimary,
   },
-  recordingMeta: {
+  sectionCount: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 20,
     color: themeLight.textSecondary,
   },
-  ellipsisButton: {
-    padding: 8, // --space-2
-    borderRadius: 20,
+
+  // ── Recording Cards ──
+  cardList: {
+    paddingHorizontal: 20,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: 'rgba(44, 40, 38, 0.04)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  cardTitle: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 16,
+    color: themeLight.textPrimary,
+    flex: 1,
+    marginRight: 8,
+  },
+  cardEllipsis: {
+    padding: 4,
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: -8,
+    marginRight: -8,
+  },
+  cardMeta: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 13,
+    color: themeLight.textSecondary,
+    marginTop: 4,
+  },
+  replayButton: {
+    marginTop: 12,
+    backgroundColor: themeLight.textPrimary,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  replayButtonText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 13,
+    color: '#FFFFFF',
   },
 
-  // ── List State Bottom (pulse rings) ──
-  bottomActionAreaContainer: {
-    backgroundColor: themeLight.bgPrimary,
-    borderTopWidth: 1,
-    borderTopColor: themeLight.border,
-  },
-  bottomActionArea: {
-    width: '100%',
-    maxWidth: 420,
-    alignSelf: 'center',
-    paddingHorizontal: 16, // --space-4
-    alignItems: 'center',
-  },
-  ctaContainer: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16, // --space-4
-    width: '100%',
-    minHeight: 120,
-  },
-  pulseContainer: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: themeLight.accent,
-  },
-  solidCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: themeLight.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  labelCard: {
+  // ── Mini Audio Player ──
+  miniPlayer: {
     backgroundColor: themeLight.bgSecondary,
-    paddingHorizontal: 16, // --space-4
-    paddingVertical: 12, // --space-3
-    borderRadius: 10, // --radius-md
-    borderWidth: 1,
-    borderColor: themeLight.border,
-    shadowColor: themeLight.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: themeLight.border,
   },
-  labelText: {
-    color: themeLight.textPrimary,
-    fontSize: 14, // --font-size-sm
-    fontWeight: '500',
+  miniPlayButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: themeLight.textPrimary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniTimeText: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 12,
+    color: themeLight.textSecondary,
+  },
+  miniProgressTrack: {
+    height: 3,
+    backgroundColor: themeLight.border,
+    borderRadius: 1.5,
+    flex: 1,
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  miniProgressFill: {
+    height: '100%',
+    backgroundColor: themeLight.accent,
+    borderRadius: 1.5,
+  },
+  miniSpeedLabel: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 13,
+    color: themeLight.textSecondary,
+    marginLeft: 12,
+  },
+  miniCloseButton: {
+    marginLeft: 12,
+    padding: 4,
   },
 
   // ── Toast ──
@@ -683,10 +818,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: themeLight.success,
-    paddingHorizontal: 16, // --space-4
-    paddingVertical: 12, // --space-3
-    borderRadius: 10, // --radius-md
-    gap: 8, // --space-2
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
     shadowColor: themeLight.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
