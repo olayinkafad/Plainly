@@ -1,13 +1,17 @@
-import React from 'react'
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import { View, Text, Pressable, StyleSheet, Animated, Easing } from 'react-native'
 import { Body, Meta } from './typography'
 import { StructuredTranscript } from '../types'
 import { themeLight } from '../constants/theme'
+
+const HIGHLIGHT_BG = '#F0E6DF'
+const HIGHLIGHT_DURATION_MS = 3000
 
 interface TranscriptDisplayProps {
   transcript: StructuredTranscript
   durationSec?: number
   onTimestampPress?: (positionMs: number) => void
+  animateFirstSentence?: boolean
 }
 
 // Multi-word fillers must come before single-word to match greedily
@@ -53,7 +57,116 @@ function formatTimestamp(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
-export default function TranscriptDisplay({ transcript, durationSec = 0, onTimestampPress }: TranscriptDisplayProps) {
+// Extract first sentence from text (up to first . ! or ?)
+function extractFirstSentence(text: string): { firstSentence: string; rest: string } {
+  const match = text.match(/^(.*?[.!?])\s*(.*)$/s)
+  if (match) {
+    return { firstSentence: match[1], rest: match[2] }
+  }
+  // No sentence-ending punctuation found — use the whole text
+  return { firstSentence: text, rest: '' }
+}
+
+// Animated word component for the highlight effect
+function HighlightWord({
+  word,
+  filler,
+  wordIndex,
+  wordCount,
+  progress,
+}: {
+  word: string
+  filler: boolean
+  wordIndex: number
+  wordCount: number
+  progress: Animated.Value
+}) {
+  const startNorm = Math.max(0, (wordIndex - 4) / wordCount)
+  let endNorm = wordIndex / wordCount
+  // inputRange must be strictly increasing
+  endNorm = Math.min(1, Math.max(endNorm, startNorm + 0.001))
+  const bgColor = progress.interpolate({
+    inputRange: [0, startNorm, endNorm, 1],
+    outputRange: [
+      'transparent',
+      'transparent',
+      HIGHLIGHT_BG,
+      'transparent',
+    ],
+  })
+
+  return (
+    <Animated.View style={[styles.wordWrap, { backgroundColor: bgColor }]}>
+      <Text style={[styles.segmentText, filler && styles.fillerWord]}>
+        {word}{' '}
+      </Text>
+    </Animated.View>
+  )
+}
+
+// First sentence with word-by-word highlight animation
+function AnimatedFirstSegment({
+  firstSentenceText,
+  restText,
+}: {
+  firstSentenceText: string
+  restText: string
+}) {
+  const progress = useRef(new Animated.Value(0)).current
+  const [animationDone, setAnimationDone] = useState(false)
+
+  const words = firstSentenceText.split(/\s+/).filter(w => w.length > 0)
+  const wordCount = words.length
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: HIGHLIGHT_DURATION_MS,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start(() => {
+      setAnimationDone(true)
+    })
+  }, [])
+
+  if (animationDone) {
+    // After animation, render normally
+    const fullText = restText ? firstSentenceText + ' ' + restText : firstSentenceText
+    return (
+      <Text style={styles.segmentTextContainer}>
+        {renderTextWithFillers(fullText)}
+      </Text>
+    )
+  }
+
+  return (
+    <View>
+      <View style={styles.animatedSentenceContainer}>
+        {words.map((word, i) => {
+          FILLER_PATTERN.lastIndex = 0
+          const isFiller = FILLER_PATTERN.test(word.replace(/[^a-z']/gi, ''))
+          return (
+            <HighlightWord
+              key={i}
+              word={word}
+              filler={isFiller}
+              wordIndex={i}
+              wordCount={wordCount}
+              progress={progress}
+            />
+          )
+        })}
+      </View>
+      {restText ? (
+        <Text style={styles.segmentTextContainer}>
+          {renderTextWithFillers(restText)}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+export default function TranscriptDisplay({ transcript, durationSec = 0, onTimestampPress, animateFirstSentence = false }: TranscriptDisplayProps) {
   const { segments, speaker_separation, confidence_notes } = transcript
   const showTimestamps = durationSec > 60
 
@@ -72,24 +185,40 @@ export default function TranscriptDisplay({ transcript, durationSec = 0, onTimes
 
       {/* Segments */}
       <View style={styles.segmentsContainer}>
-        {segments.map((segment, index) => (
-          <View key={index} style={styles.segment}>
-            {showTimestamps && typeof segment.start === 'number' && (
-              <Pressable
-                onPress={() => onTimestampPress?.(segment.start * 1000)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                <Text style={styles.timestamp}>{formatTimestamp(segment.start)}</Text>
-              </Pressable>
-            )}
-            {speaker_separation === 'provided' && (
-              <Meta style={styles.speakerLabel}>{segment.speaker}</Meta>
-            )}
-            <Text style={styles.segmentTextContainer}>
-              {renderTextWithFillers(segment.text)}
-            </Text>
-          </View>
-        ))}
+        {segments.map((segment, index) => {
+          const isFirstSegment = index === 0 && animateFirstSentence
+
+          return (
+            <View key={index} style={styles.segment}>
+              {showTimestamps && typeof segment.start === 'number' && (
+                <Pressable
+                  onPress={() => onTimestampPress?.(segment.start * 1000)}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={styles.timestamp}>{formatTimestamp(segment.start)}</Text>
+                </Pressable>
+              )}
+              {speaker_separation === 'provided' && (
+                <Meta style={styles.speakerLabel}>{segment.speaker}</Meta>
+              )}
+              {isFirstSegment ? (
+                (() => {
+                  const { firstSentence, rest } = extractFirstSentence(segment.text)
+                  return (
+                    <AnimatedFirstSegment
+                      firstSentenceText={firstSentence}
+                      restText={rest}
+                    />
+                  )
+                })()
+              ) : (
+                <Text style={styles.segmentTextContainer}>
+                  {renderTextWithFillers(segment.text)}
+                </Text>
+              )}
+            </View>
+          )
+        })}
       </View>
     </View>
   )
@@ -145,5 +274,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 28,
     color: themeLight.textTertiary,
+  },
+  animatedSentenceContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+  },
+  wordWrap: {
+    borderRadius: 2,
   },
 })

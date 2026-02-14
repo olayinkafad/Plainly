@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, FlatList, Pressable, Alert, Image, Animated, LayoutAnimation, Platform, UIManager } from 'react-native'
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Image, Animated, LayoutAnimation, Platform, UIManager, Easing } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync, getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio'
 import Icon from '../components/Icon'
 import { format } from 'date-fns'
@@ -19,6 +20,22 @@ import { StructuredSummary, StructuredTranscript } from '../types'
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
 }
+
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 12) return 'Good morning. What\u2019s on your mind?'
+  if (hour >= 12 && hour < 17) return 'Good afternoon. What\u2019s on your mind?'
+  if (hour >= 17 && hour < 21) return 'Good evening. What\u2019s on your mind?'
+  return 'Late thoughts? What\u2019s on your mind?'
+}
+
+const MILESTONES: { count: number; text: string }[] = [
+  { count: 5, text: "5 recordings. You\u2019re building a habit." },
+  { count: 10, text: "10 recordings. You\u2019re on a roll." },
+  { count: 25, text: "25. That\u2019s a lot of clear thinking." },
+  { count: 50, text: "50 recordings. Plainly is your tool now." },
+  { count: 100, text: "100. You\u2019ve said a lot worth keeping." },
+]
 
 // Pulsing dot for processing state
 function PulsingDot() {
@@ -81,12 +98,27 @@ export default function Home() {
   const renamedToastAnim = useRef(new Animated.Value(0)).current
   const renamedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Fresh Start State ──
+  const [isFreshStart, setIsFreshStart] = useState(false)
+
+  // ── Milestone Toast State ──
+  const [showMilestoneToast, setShowMilestoneToast] = useState(false)
+  const [milestoneToastText, setMilestoneToastText] = useState('')
+  const milestoneToastAnim = useRef(new Animated.Value(0)).current
+  const milestoneToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // ── Mini Player State ──
   const SPEED_OPTIONS = [1, 1.5, 2, 0.5] as const
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [miniPlayerVisible, setMiniPlayerVisible] = useState(false)
   const scrubberWidthRef = useRef(200)
+
+  // ── Breathing Mic Animation ──
+  const outerRingScale = useRef(new Animated.Value(1)).current
+  const innerButtonScale = useRef(new Animated.Value(1)).current
+  const breathingLoopRef = useRef<Animated.CompositeAnimation | null>(null)
+  const isScrollingRef = useRef(false)
 
   // expo-audio hooks for mini player
   const player = useAudioPlayer(null)
@@ -111,6 +143,7 @@ export default function Home() {
     return () => {
       if (deletedToastTimerRef.current) clearTimeout(deletedToastTimerRef.current)
       if (renamedToastTimerRef.current) clearTimeout(renamedToastTimerRef.current)
+      if (milestoneToastTimerRef.current) clearTimeout(milestoneToastTimerRef.current)
     }
   }, [params.deleted])
 
@@ -125,11 +158,58 @@ export default function Home() {
     try {
       const allRecordings = await recordingsStore.getAll()
       setRecordings(allRecordings)
+
+      // Check fresh start flag
+      if (allRecordings.length === 0) {
+        const flag = await AsyncStorage.getItem('@plainly_has_deleted_all')
+        setIsFreshStart(flag === 'true')
+      } else {
+        setIsFreshStart(false)
+      }
+
+      // Check milestones
+      checkMilestones(allRecordings.length)
     } catch (error) {
       console.error('Failed to load recordings:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const checkMilestones = async (count: number) => {
+    for (const milestone of MILESTONES) {
+      if (count >= milestone.count) {
+        const key = `@plainly_milestone_${milestone.count}`
+        const seen = await AsyncStorage.getItem(key)
+        if (!seen) {
+          await AsyncStorage.setItem(key, 'true')
+          showMilestoneToastNotification(milestone.text)
+          return // Only show one milestone at a time
+        }
+      }
+    }
+  }
+
+  const showMilestoneToastNotification = (text: string) => {
+    if (milestoneToastTimerRef.current) clearTimeout(milestoneToastTimerRef.current)
+    setMilestoneToastText(text)
+    setShowMilestoneToast(true)
+    milestoneToastAnim.setValue(0)
+    Animated.timing(milestoneToastAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+
+    milestoneToastTimerRef.current = setTimeout(() => {
+      Animated.timing(milestoneToastAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowMilestoneToast(false)
+      })
+    }, 3000)
   }
 
   const handleRecord = async () => {
@@ -162,6 +242,9 @@ export default function Home() {
   const handleSaveRecording = async (recording: Recording, showToast: boolean = true) => {
     try {
       await recordingsStore.add(recording)
+      // Clear fresh start flag when new recording is made
+      await AsyncStorage.removeItem('@plainly_has_deleted_all')
+      setIsFreshStart(false)
       await loadRecordings()
       if (showToast) {
         showToastNotification()
@@ -274,6 +357,13 @@ export default function Home() {
         closeMiniPlayer()
       }
       await recordingsStore.delete(id)
+
+      // Check if all recordings are now gone
+      const remaining = await recordingsStore.getAll()
+      if (remaining.length === 0) {
+        await AsyncStorage.setItem('@plainly_has_deleted_all', 'true')
+      }
+
       await loadRecordings()
       setShowActionsSheet(false)
       setSelectedRecordingId(null)
@@ -439,6 +529,79 @@ export default function Home() {
     setMiniPlayerVisible(false)
   }
 
+  // ── Breathing Mic Animation ──
+
+  const startBreathingAnimation = () => {
+    if (breathingLoopRef.current) return
+    const outerScaleLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(outerRingScale, {
+          toValue: 1.15,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(outerRingScale, {
+          toValue: 1.0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    )
+    const innerLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(innerButtonScale, {
+          toValue: 1.06,
+          duration: 2200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(innerButtonScale, {
+          toValue: 1.0,
+          duration: 2200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    )
+    const combined = Animated.parallel([outerScaleLoop, innerLoop])
+    breathingLoopRef.current = combined
+    combined.start()
+  }
+
+  const stopBreathingAnimation = () => {
+    if (breathingLoopRef.current) {
+      breathingLoopRef.current.stop()
+      breathingLoopRef.current = null
+    }
+    outerRingScale.setValue(1)
+    innerButtonScale.setValue(1)
+  }
+
+  // Start breathing animation (always active unless scrolling)
+  useEffect(() => {
+    if (!isScrollingRef.current) {
+      startBreathingAnimation()
+    }
+    return () => stopBreathingAnimation()
+  }, [recordings.length])
+
+  const handleScrollBeginDrag = () => {
+    isScrollingRef.current = true
+    stopBreathingAnimation()
+  }
+
+  const handleScrollEndDrag = () => {
+    isScrollingRef.current = false
+    startBreathingAnimation()
+  }
+
+  const handleMomentumScrollEnd = () => {
+    isScrollingRef.current = false
+    startBreathingAnimation()
+  }
+
   const selectedRecording = recordings.find((r) => r.id === selectedRecordingId)
 
   if (loading) {
@@ -472,11 +635,11 @@ export default function Home() {
           accessibilityLabel="Record your voice note"
           accessibilityRole="button"
         >
-          <View style={styles.micOuterRing}>
-            <View style={styles.micButton}>
+          <Animated.View style={[styles.micOuterRing, { transform: [{ scale: outerRingScale }] }]}>
+            <Animated.View style={[styles.micButton, { transform: [{ scale: innerButtonScale }] }]}>
               <Icon name="microphone" size={28} color="#FFFFFF" />
-            </View>
-          </View>
+            </Animated.View>
+          </Animated.View>
         </Pressable>
       </View>
     </View>
@@ -550,6 +713,29 @@ export default function Home() {
         </Animated.View>
       )}
 
+      {/* Milestone Toast */}
+      {showMilestoneToast && (
+        <Animated.View
+          style={[
+            styles.milestoneToast,
+            {
+              opacity: milestoneToastAnim,
+              transform: [
+                {
+                  translateY: milestoneToastAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+          pointerEvents="none"
+        >
+          <Body style={styles.milestoneToastText}>{milestoneToastText}</Body>
+        </Animated.View>
+      )}
+
       {/* Header */}
       <View style={styles.header}>
         <Title style={styles.headerTitle}>Plainly</Title>
@@ -559,7 +745,10 @@ export default function Home() {
         /* ── Empty State ── */
         <View style={styles.contentWrapper}>
           <View style={styles.contentArea}>
-            <Title style={styles.emptyTitle}>What's on your mind?</Title>
+            {isFreshStart && (
+              <Title style={styles.freshStartText}>Fresh start.</Title>
+            )}
+            <Title style={[styles.emptyTitle, isFreshStart && { marginTop: 4 }]}>What's on your mind?</Title>
             <Body style={styles.emptySubtext}>
               Your recordings will show up here.
             </Body>
@@ -618,8 +807,8 @@ export default function Home() {
 
             {/* Section Label */}
             <View style={styles.sectionLabelRow}>
-              <Body style={styles.sectionLabel}>Recordings </Body>
-              <Body style={styles.sectionCount}>({recordings.length})</Body>
+              <Text style={styles.greetingWhisper}>{getGreeting()}</Text>
+              <Text style={styles.sectionLabel}>Recordings</Text>
             </View>
 
             {/* Recording Cards */}
@@ -692,6 +881,9 @@ export default function Home() {
                 { paddingBottom: 140 + insets.bottom },
               ]}
               showsVerticalScrollIndicator={false}
+              onScrollBeginDrag={handleScrollBeginDrag}
+              onScrollEndDrag={handleScrollEndDrag}
+              onMomentumScrollEnd={handleMomentumScrollEnd}
             />
           </View>
           {renderBottomSection()}
@@ -784,6 +976,12 @@ const styles = StyleSheet.create({
   },
 
   // ── Empty State ──
+  freshStartText: {
+    fontSize: 22,
+    textAlign: 'center',
+    color: themeLight.accent,
+    marginTop: 40,
+  },
   emptyTitle: {
     fontSize: 22,
     textAlign: 'center',
@@ -857,11 +1055,19 @@ const styles = StyleSheet.create({
 
   // ── Section Label ──
   sectionLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
     paddingHorizontal: 20,
     paddingTop: 20,
+    marginBottom: 20,
+  },
+  greetingWhisper: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 14,
+    color: themeLight.textSecondary,
     marginBottom: 12,
+  },
+  recordingsHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   sectionLabel: {
     fontFamily: 'PlusJakartaSans_700Bold',
@@ -1093,6 +1299,30 @@ const styles = StyleSheet.create({
   renamedToastText: {
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: '#FFFFFF',
+  },
+
+  // Milestone toast
+  milestoneToast: {
+    position: 'absolute',
+    top: 70,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: themeLight.textPrimary,
+    borderRadius: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    zIndex: 1000,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  milestoneToastText: {
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans_500Medium',
     color: '#FFFFFF',
   },
 })

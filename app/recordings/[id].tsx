@@ -21,8 +21,8 @@ import { themeLight } from '../../constants/theme'
 const TOOLTIP_STORAGE_KEY = '@plainly_tooltip_result_tabs_seen'
 
 const formatOptions: { key: OutputType; title: string }[] = [
-  { key: 'transcript', title: 'Transcript' },
   { key: 'summary', title: 'Summary' },
+  { key: 'transcript', title: 'Transcript' },
 ]
 
 export default function RecordingDetail() {
@@ -63,6 +63,13 @@ export default function RecordingDetail() {
   // Content crossfade
   const contentOpacity = useRef(new Animated.Value(1)).current
 
+  // Magic moment — first ever result
+  const [showMagicMoment, setShowMagicMoment] = useState(false)
+  const magicMomentAnim = useRef(new Animated.Value(0)).current
+
+  // First transcript view flag
+  const [animateFirstTranscript, setAnimateFirstTranscript] = useState(false)
+
   useEffect(() => {
     loadRecording()
     hasAutoTitledRef.current = false
@@ -73,6 +80,47 @@ export default function RecordingDetail() {
       if (renamedToastTimerRef.current) clearTimeout(renamedToastTimerRef.current)
     }
   }, [id])
+
+  // Check magic moment on first ever result
+  useEffect(() => {
+    if (!recording || !isNew) return
+    const checkFirstResult = async () => {
+      try {
+        const seen = await AsyncStorage.getItem('@plainly_first_result_seen')
+        if (!seen) {
+          await AsyncStorage.setItem('@plainly_first_result_seen', 'true')
+          setShowMagicMoment(true)
+          Animated.timing(magicMomentAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }).start()
+        }
+      } catch {
+        // Fail silently
+      }
+    }
+    checkFirstResult()
+  }, [recording?.id, isNew])
+
+  // Check first transcript view
+  useEffect(() => {
+    if (!recording || activeFormat !== 'transcript') return
+    const structuredTranscript = getStructuredTranscript(recording.outputs.transcript)
+    if (!structuredTranscript) return
+    const checkFirstTranscript = async () => {
+      try {
+        const seen = await AsyncStorage.getItem('@plainly_first_transcript_seen')
+        if (!seen) {
+          await AsyncStorage.setItem('@plainly_first_transcript_seen', 'true')
+          setAnimateFirstTranscript(true)
+        }
+      } catch {
+        // Fail silently
+      }
+    }
+    checkFirstTranscript()
+  }, [recording?.id, activeFormat])
 
   // Toast + tooltip sequence only after a fresh generation
   useEffect(() => {
@@ -235,9 +283,9 @@ export default function RecordingDetail() {
       }
     }
     // Always show both tabs even if one has no data yet
-    if (available.length === 0) return ['transcript', 'summary']
-    if (!available.includes('transcript')) available.unshift('transcript')
-    if (!available.includes('summary')) available.push('summary')
+    if (available.length === 0) return ['summary', 'transcript']
+    if (!available.includes('summary')) available.unshift('summary')
+    if (!available.includes('transcript')) available.push('transcript')
     return available
   }
 
@@ -504,8 +552,30 @@ export default function RecordingDetail() {
     }
   }
 
+  const dismissMagicMoment = useCallback(() => {
+    if (!showMagicMoment) return
+    Animated.timing(magicMomentAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowMagicMoment(false)
+    })
+  }, [showMagicMoment, magicMomentAnim])
+
+  const handleContentScroll = (event: any) => {
+    if (showMagicMoment && event.nativeEvent.contentOffset.y > 10) {
+      dismissMagicMoment()
+    }
+  }
+
   const handleFormatSwitch = (fmt: OutputType) => {
     if (fmt === activeFormat || !recording) return
+
+    // Dismiss magic moment if showing
+    if (showMagicMoment) {
+      dismissMagicMoment()
+    }
 
     // Dismiss tooltip if showing
     if (showTooltip) {
@@ -673,7 +743,16 @@ export default function RecordingDetail() {
         <ScrollView
           style={styles.contentScrollView}
           contentContainerStyle={styles.contentScrollContent}
+          onScroll={handleContentScroll}
+          scrollEventThrottle={16}
         >
+          {/* Magic moment — first ever result */}
+          {showMagicMoment && (
+            <Animated.View style={[styles.magicMomentContainer, { opacity: magicMomentAnim }]}>
+              <Body style={styles.magicMomentText}>Here's what you said, cleaned up.</Body>
+            </Animated.View>
+          )}
+
           {(() => {
             const isUnavailable = isFormatUnavailable(activeFormat, output)
 
@@ -705,6 +784,7 @@ export default function RecordingDetail() {
                         transcript={structuredTranscript}
                         durationSec={recording.durationSec}
                         onTimestampPress={(positionMs) => audioPlayerRef.current?.seekTo(positionMs)}
+                        animateFirstSentence={animateFirstTranscript}
                       />
                     ) : (
                       <Body style={styles.outputText}>{typeof output === 'string' ? output : ''}</Body>
@@ -752,10 +832,10 @@ export default function RecordingDetail() {
               <View style={styles.tooltipArrowShape} />
             </View>
             <Text style={styles.tooltipText}>
-              <Text style={styles.tooltipBold}>Transcript</Text>
-              {' has the full context of what you said. '}
               <Text style={styles.tooltipBold}>Summary</Text>
-              {' shows the key points.'}
+              {' shows the key points. '}
+              <Text style={styles.tooltipBold}>Transcript</Text>
+              {' has the full context of what you said.'}
             </Text>
             <Pressable style={styles.tooltipButton} onPress={dismissTooltip}>
               <Body style={styles.tooltipButtonText}>Got it</Body>
@@ -1009,6 +1089,18 @@ const styles = StyleSheet.create({
   },
   contentScrollContent: {
     paddingBottom: 40,
+  },
+  magicMomentContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  magicMomentText: {
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
+    color: themeLight.textSecondary,
+    textAlign: 'center',
   },
   contentContainer: {
     paddingHorizontal: 20,

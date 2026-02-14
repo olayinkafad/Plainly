@@ -798,6 +798,30 @@ export default function RecordingModal({
 
     if (processingAbortedRef.current) return
 
+    // Drift-out animation: steps fade up and out
+    await new Promise<void>((resolve) => {
+      Animated.parallel(
+        PROCESSING_STEPS.map((_, i) =>
+          Animated.parallel([
+            Animated.timing(stepAnims[i].opacity, {
+              toValue: 0,
+              duration: 900,
+              easing: Easing.out(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(stepAnims[i].translateY, {
+              toValue: -35,
+              duration: 900,
+              easing: Easing.out(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        )
+      ).start(() => resolve())
+    })
+
+    if (processingAbortedRef.current) return
+
     await finishProcessing()
   }
 
