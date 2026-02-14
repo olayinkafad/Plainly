@@ -911,30 +911,28 @@ export default function RecordingModal({
         {showCloseSheet && (
           <View style={styles.closeSheetOverlay}>
             <Pressable style={styles.closeSheetDismiss} onPress={() => setShowCloseSheet(false)} />
-            <View style={[styles.closeSheetContainer, { paddingBottom: Math.max(insets.bottom, 34) }]}>
-              <View style={styles.closeSheetCard}>
-                <Pressable
-                  style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
-                  onPress={handleSaveAndFinish}
-                >
-                  <Body style={styles.closeSheetSaveText}>Save and finish</Body>
-                </Pressable>
-                <View style={styles.closeSheetDivider} />
-                <Pressable
-                  style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
-                  onPress={handleDiscardRecording}
-                >
-                  <Body style={styles.closeSheetDiscardText}>Discard recording</Body>
-                </Pressable>
-              </View>
-              <View style={styles.closeSheetCancelCard}>
-                <Pressable
-                  style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
-                  onPress={() => setShowCloseSheet(false)}
-                >
-                  <Body style={styles.closeSheetCancelText}>Cancel</Body>
-                </Pressable>
-              </View>
+            <View style={[styles.closeSheetCard, { paddingBottom: insets.bottom + 28 }]}>
+              <Pressable
+                style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
+                onPress={handleSaveAndFinish}
+              >
+                <Body style={styles.closeSheetSaveText}>Save and finish</Body>
+              </Pressable>
+              <View style={styles.closeSheetDivider} />
+              <Pressable
+                style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
+                onPress={handleDiscardRecording}
+              >
+                <Body style={styles.closeSheetDiscardText}>Discard recording</Body>
+              </Pressable>
+              <View style={styles.closeSheetDivider} />
+              <View style={styles.closeSheetGap} />
+              <Pressable
+                style={({ pressed }) => [styles.closeSheetOption, pressed && { opacity: 0.7 }]}
+                onPress={() => setShowCloseSheet(false)}
+              >
+                <Body style={styles.closeSheetCancelText}>Cancel</Body>
+              </Pressable>
             </View>
           </View>
         )}
@@ -1154,28 +1152,21 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
 
-  // ── Discard Confirmation ──
+  // ── Close Action Sheet ──
   closeSheetOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     justifyContent: 'flex-end',
   },
   closeSheetDismiss: {
     flex: 1,
   },
-  closeSheetContainer: {
-    paddingHorizontal: 12,
-  },
   closeSheetCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  closeSheetCancelCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginTop: 8,
-    overflow: 'hidden',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
   },
   closeSheetOption: {
     paddingVertical: 17,
@@ -1184,6 +1175,9 @@ const styles = StyleSheet.create({
   closeSheetDivider: {
     height: 1,
     backgroundColor: themeLight.borderSubtle,
+  },
+  closeSheetGap: {
+    height: 8,
   },
   closeSheetSaveText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
