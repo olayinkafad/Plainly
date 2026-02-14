@@ -72,7 +72,7 @@ export default function MicPermissionSheet({
               accessibilityLabel="Close"
               accessibilityRole="button"
             >
-              <Icon name="x" size={24} color={themeLight.textTertiary} />
+              <Icon name="x" size={20} color={themeLight.textSecondary} />
             </Pressable>
 
             {/* Heading */}
@@ -134,7 +134,8 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     alignSelf: 'flex-end',
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',

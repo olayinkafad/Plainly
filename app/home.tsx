@@ -747,7 +747,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   cardEllipsis: {
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
@@ -832,7 +833,12 @@ const styles = StyleSheet.create({
   },
   miniCloseButton: {
     marginLeft: 12,
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // ── Toast ──

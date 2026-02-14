@@ -744,7 +744,7 @@ export default function RecordingModal({
                 accessibilityLabel="Close recording"
                 accessibilityRole="button"
               >
-                <Icon name="x" size={24} color={themeLight.textTertiary} />
+                <Icon name="x" size={20} color={themeLight.textSecondary} />
               </Pressable>
 
               <ScrollView
@@ -959,7 +959,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginRight: 20,
     marginBottom: 16,
-    padding: 4,
+    padding: 8,
+    borderRadius: 20,
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',

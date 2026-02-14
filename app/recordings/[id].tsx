@@ -531,18 +531,18 @@ export default function RecordingDetail() {
           style={styles.navButton}
           onPress={() => router.push('/home')}
         >
-          <Icon name="x" size={24} color={themeLight.textPrimary} />
+          <Icon name="x" size={20} color={themeLight.textSecondary} />
         </Pressable>
         <View style={styles.navSpacer} />
         <View style={styles.navActionsContainer}>
           <Pressable style={styles.navActionButton} onPress={handleCopy}>
-            <Icon name="copy" size={24} color={themeLight.textSecondary} />
+            <Icon name="copy" size={20} color={themeLight.textSecondary} />
           </Pressable>
           <Pressable style={styles.navActionButton} onPress={handleShare}>
-            <Icon name="share" size={24} color={themeLight.textSecondary} />
+            <Icon name="share" size={20} color={themeLight.textSecondary} />
           </Pressable>
           <Pressable style={styles.navActionButton} onPress={() => setShowActionsSheet(true)}>
-            <Icon name="dots-three-vertical" size={24} color={themeLight.textSecondary} />
+            <Icon name="dots-three-vertical" size={20} color={themeLight.textSecondary} />
           </Pressable>
         </View>
       </View>
@@ -737,10 +737,13 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   navButton: {
-    width: 44,
-    height: 44,
+    padding: 8,
+    borderRadius: 20,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: -12,
   },
   navSpacer: {
     flex: 1,
@@ -748,11 +751,14 @@ const styles = StyleSheet.create({
   navActionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 0,
+    marginRight: -12,
   },
   navActionButton: {
-    width: 44,
-    height: 44,
+    padding: 8,
+    borderRadius: 20,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
