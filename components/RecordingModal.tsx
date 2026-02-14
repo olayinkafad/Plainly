@@ -682,7 +682,7 @@ export default function RecordingModal({
 
     if (savedId) {
       setTimeout(() => {
-        router.replace(`/recordings/${savedId}`)
+        router.replace(`/recordings/${savedId}?new=1`)
       }, 300)
     }
   }

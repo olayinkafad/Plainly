@@ -88,7 +88,7 @@ export default function Generating() {
         lastViewedFormat: 'summary',
       })
 
-      router.replace(`/recordings/${recordingId}`)
+      router.replace(`/recordings/${recordingId}?new=1`)
     } catch (err: any) {
       let errorMsg = 'Something went wrong. Please try again.'
 

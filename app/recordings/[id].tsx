@@ -29,7 +29,7 @@ const formatOptions: { key: OutputType; title: string }[] = [
 export default function RecordingDetail() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, new: isNew } = useLocalSearchParams<{ id: string; new?: string }>()
   const [recording, setRecording] = useState<Recording | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeFormat, setActiveFormat] = useState<OutputType>('summary')
@@ -63,9 +63,9 @@ export default function RecordingDetail() {
     }
   }, [id])
 
-  // Toast + tooltip sequence after recording loads
+  // Toast + tooltip sequence only after a fresh generation
   useEffect(() => {
-    if (!recording) return
+    if (!recording || !isNew) return
 
     // Step 1: Fade in toast
     setShowSavedToast(true)
