@@ -213,7 +213,7 @@ export default function OnboardingWaveform() {
               alignRight ? { right: 16, left: undefined, textAlign: 'right' } : { left: `${xFraction * 100}%` },
               {
                 top: `${yFraction * 100}%`,
-                color: `rgba(${themeLight.accentRgb}, ${PHRASE_OPACITIES[i]})`,
+                color: `rgba(181, 175, 169, ${PHRASE_OPACITIES[i]})`,
                 fontSize: PHRASE_FONT_SIZES[i],
                 transform: [{ translateY: driftY }],
                 opacity,
@@ -297,7 +297,7 @@ export default function OnboardingWaveform() {
                   styles.bar,
                   {
                     height: h,
-                    backgroundColor: ACCENT,
+                    backgroundColor: '#C4B8AE',
                     opacity: BAR_OPACITIES[i],
                     transform: [{ translateY }, { scaleY }],
                   },
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   },
   phrase: {
     position: 'absolute',
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_500Medium',
     fontWeight: '500',
     maxWidth: '38%',
   },
@@ -339,11 +339,11 @@ const styles = StyleSheet.create({
     left: (MIC_RING_WRAPPER_SIZE - 200) / 2,
     top: (MIC_RING_WRAPPER_SIZE - 200) / 2,
     borderRadius: 100,
-    backgroundColor: `rgba(${themeLight.accentRgb}, 0.12)`,
+    backgroundColor: 'rgba(44, 40, 38, 0.04)',
   },
   pulseRing: {
     position: 'absolute',
-    backgroundColor: `rgba(${themeLight.accentRgb}, 0.1)`,
+    backgroundColor: 'rgba(44, 40, 38, 0.04)',
   },
   micCircle: {
     width: MIC_SIZE,

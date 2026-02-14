@@ -5,15 +5,22 @@ import { useFonts } from 'expo-font'
 import * as SplashScreen from 'expo-splash-screen'
 import { View, ActivityIndicator } from 'react-native'
 import { themeLight } from '../constants/theme'
+import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold'
+import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display/700Bold'
+import { PlusJakartaSans_400Regular } from '@expo-google-fonts/plus-jakarta-sans/400Regular'
+import { PlusJakartaSans_500Medium } from '@expo-google-fonts/plus-jakarta-sans/500Medium'
+import { PlusJakartaSans_600SemiBold } from '@expo-google-fonts/plus-jakarta-sans/600SemiBold'
 
 // Keep the splash screen visible while we load fonts
 SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    'Satoshi-Regular': require('../assets/Fonts/OTF/Satoshi-Regular.otf'),
-    'Satoshi-Medium': require('../assets/Fonts/OTF/Satoshi-Medium.otf'),
-    'Satoshi-Bold': require('../assets/Fonts/OTF/Satoshi-Bold.otf'),
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_700Bold,
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
   })
 
   useEffect(() => {

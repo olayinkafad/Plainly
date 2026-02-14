@@ -2,13 +2,13 @@ import { Text, TextProps, StyleSheet, TextStyle } from 'react-native'
 import { themeLight } from '../constants/theme'
 
 /**
- * Typography components using Satoshi font family.
- * 
+ * Typography components using Playfair Display + Plus Jakarta Sans.
+ *
  * Rules from DESIGN_SYSTEM.md:
- * - Headings use Satoshi-Bold
- * - Body text uses Satoshi-Regular
- * - Buttons and CTAs use Satoshi-Medium
- * - Metadata uses Satoshi-Regular
+ * - Headings use PlayfairDisplay_700Bold
+ * - Body text uses PlusJakartaSans_400Regular
+ * - Buttons and CTAs use PlusJakartaSans_600SemiBold
+ * - Metadata uses PlusJakartaSans_400Regular
  */
 
 interface TypographyProps extends TextProps {
@@ -17,7 +17,7 @@ interface TypographyProps extends TextProps {
 
 /**
  * Title component - for headings and primary titles
- * Uses Satoshi-Bold
+ * Uses PlayfairDisplay_700Bold
  */
 export function Title({ style, children, ...props }: TypographyProps) {
   return (
@@ -29,7 +29,7 @@ export function Title({ style, children, ...props }: TypographyProps) {
 
 /**
  * Body component - for body text
- * Uses Satoshi-Regular
+ * Uses PlusJakartaSans_400Regular
  */
 export function Body({ style, children, ...props }: TypographyProps) {
   return (
@@ -41,7 +41,7 @@ export function Body({ style, children, ...props }: TypographyProps) {
 
 /**
  * Meta component - for metadata (dates, durations, captions)
- * Uses Satoshi-Regular (smaller size)
+ * Uses PlusJakartaSans_400Regular (smaller size)
  */
 export function Meta({ style, children, ...props }: TypographyProps) {
   return (
@@ -53,7 +53,7 @@ export function Meta({ style, children, ...props }: TypographyProps) {
 
 /**
  * ButtonText component - for button labels and CTAs
- * Uses Satoshi-Medium
+ * Uses PlusJakartaSans_600SemiBold
  */
 export function ButtonText({ style, children, ...props }: TypographyProps) {
   return (
@@ -65,23 +65,23 @@ export function ButtonText({ style, children, ...props }: TypographyProps) {
 
 const styles = StyleSheet.create({
   title: {
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlayfairDisplay_700Bold',
     fontSize: 24,
     color: themeLight.textPrimary,
   },
   body: {
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     fontSize: 14,
     color: themeLight.textPrimary,
     lineHeight: 20,
   },
   meta: {
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     fontSize: 12,
     color: themeLight.textTertiary,
   },
   buttonText: {
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 16,
   },
 })

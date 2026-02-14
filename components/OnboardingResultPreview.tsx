@@ -4,7 +4,7 @@ import Icon from './Icon'
 import { Title, Body } from './typography'
 import { themeLight } from '../constants/theme'
 
-const HIGHLIGHT_BG = `rgba(${themeLight.accentRgb}, 0.22)`
+const HIGHLIGHT_BG = '#F0E6DF'
 
 const SUMMARY_DURATION_MS = 5000
 const TRANSCRIPT_DURATION_MS = 6000
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 13,
     color: themeLight.tabInactiveText,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
   tabTextActive: {
     color: themeLight.tabActiveText,
@@ -331,6 +331,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: themeLight.textPrimary,
     marginBottom: 8,
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
   divider: {
     height: 1,
@@ -342,6 +343,7 @@ const styles = StyleSheet.create({
     color: themeLight.textPrimary,
     lineHeight: Math.round(13 * 1.6),
     marginBottom: 12,
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
   bulletSection: {
     gap: 8,
@@ -355,7 +357,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: themeLight.accent,
+    backgroundColor: '#2C2826',
     marginTop: 6,
     flexShrink: 0,
   },
@@ -364,6 +366,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: themeLight.textPrimary,
     lineHeight: Math.round(12 * 1.6),
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
   audioStrip: {
     flexDirection: 'row',
@@ -378,7 +381,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: themeLight.accent,
+    backgroundColor: '#2C2826',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -395,7 +398,7 @@ const styles = StyleSheet.create({
   audioTimeText: {
     fontSize: 12,
     color: themeLight.textSecondary,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
   audioScrubberTrack: {
     height: 4,
@@ -405,13 +408,13 @@ const styles = StyleSheet.create({
   },
   audioScrubberFill: {
     height: '100%',
-    backgroundColor: themeLight.accent,
+    backgroundColor: '#2C2826',
     borderRadius: 2,
   },
   audioSpeedLabel: {
     fontSize: 12,
     color: themeLight.textSecondary,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
   transcriptBody: {
     flexDirection: 'row',
@@ -426,7 +429,7 @@ const styles = StyleSheet.create({
   transcriptWord: {
     fontSize: 14,
     color: themeLight.textPrimary,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     lineHeight: Math.round(14 * 1.7),
   },
   transcriptWordFiller: {

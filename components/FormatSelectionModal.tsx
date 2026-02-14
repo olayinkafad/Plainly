@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   audioPreviewTitle: {
     fontSize: 14,
     color: themeLight.textPrimary,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
   audioPreviewControls: {
     flexDirection: 'row',

@@ -52,25 +52,27 @@ Users come to think, not navigate complexity.
 
 ## Typography Rules (Authoritative)
 
-Plainly uses **Satoshi** as its primary typeface.
+Plainly uses **Playfair Display** for headings and **Plus Jakarta Sans** for body text.
 
 Rules:
-- Default body text uses `Satoshi-Regular`
-- Headings and primary titles use `Satoshi-Bold`
-- Buttons and CTAs use `Satoshi-Medium`
-- Metadata (date, duration, captions) use `Satoshi-Regular`
-- Do NOT mix system fonts with Satoshi
+- Default body text uses `PlusJakartaSans_400Regular`
+- Headings and primary titles use `PlayfairDisplay_700Bold`
+- Buttons and CTAs use `PlusJakartaSans_600SemiBold`
+- Metadata (date, duration, captions) use `PlusJakartaSans_400Regular`
+- Medium-weight labels use `PlusJakartaSans_500Medium`
+- Do NOT mix system fonts with these typefaces
 - Avoid unnecessary text density
 - Long-form text is allowed when it serves clarity
 
 Hierarchy:
-- Title → Satoshi-Bold
-- Body → Satoshi-Regular
-- Meta → Satoshi-Regular (smaller size)
+- Title → PlayfairDisplay_700Bold
+- Body → PlusJakartaSans_400Regular
+- Meta → PlusJakartaSans_400Regular (smaller size)
+- ButtonText → PlusJakartaSans_600SemiBold
 
 Why:
 Typography is the primary design element in Plainly.
-A single, consistent typeface improves clarity, trust, and brand recognition.
+Playfair Display brings character to headings while Plus Jakarta Sans provides clean, readable body text.
 
 ---
 ## Iconography (Authoritative)

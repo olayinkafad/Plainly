@@ -82,7 +82,7 @@ Design consistency and visual calm depend on strict reuse.
 
 ## Typography Tokens
 
-Use Satoshi as primary typeface (see DESIGN_SYSTEM.md).
+Use Playfair Display (headings) + Plus Jakarta Sans (body) as primary typefaces (see DESIGN_SYSTEM.md).
 
 ### Font sizes
 - `--font-size-xs`: 12

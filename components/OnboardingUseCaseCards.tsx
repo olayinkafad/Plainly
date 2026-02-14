@@ -188,6 +188,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: themeLight.textPrimary,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
 })

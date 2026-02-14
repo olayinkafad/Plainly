@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     fontSize: 16,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_600SemiBold',
     color: '#FFFFFF',
   },
 })

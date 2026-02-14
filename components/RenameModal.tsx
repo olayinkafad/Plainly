@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, // --space-4
     paddingVertical: 12, // --space-3
     fontSize: 16,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
     color: themeLight.textPrimary,
     backgroundColor: themeLight.cardBg,
     minHeight: 44,

@@ -7,10 +7,10 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
   AccessibilityInfo,
+  Text,
 } from 'react-native'
 import { useRouter } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Title, Body } from '../components/typography'
 import Button from '../components/Button'
 import OnboardingWaveform from '../components/OnboardingWaveform'
 import OnboardingResultPreview from '../components/OnboardingResultPreview'
@@ -123,12 +123,12 @@ export default function Onboarding() {
         </View>
         {/* 3. Illustration → heading */}
         <View style={{ height: GAP_ILLUSTRATION_TO_HEADING }} />
-        {/* 4. Heading */}
-        <Title style={styles.title}>{item.title}</Title>
+        {/* 4. Heading – Playfair Display 700, 28px (onboarding test only) */}
+        <Text style={styles.title}>{item.title}</Text>
         {/* 5. Heading → subtext */}
         <View style={{ height: GAP_HEADING_TO_SUBTEXT }} />
-        {/* 6. Subtext */}
-        <Body style={styles.body}>{item.body}</Body>
+        {/* 6. Subtext – Plus Jakarta Sans 400, 15px (onboarding test only) */}
+        <Text style={styles.body}>{item.body}</Text>
         {/* 7. Subtext → dots (same as illustration → heading) */}
         <View style={{ height: GAP_SUBTEXT_TO_DOTS }} />
       </View>
@@ -182,7 +182,7 @@ export default function Onboarding() {
             fullWidth
             onPress={() => router.replace('/home')}
           >
-            Get started
+            <Text style={styles.getStartedButtonText}>Get started</Text>
           </Button>
         </View>
       </View>
@@ -229,18 +229,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /* Heading – Satoshi-Bold from assets, 28–30pt */
+  /* Onboarding test typography: Playfair Display 700, 28px */
   title: {
-    fontFamily: 'Satoshi-Bold',
-    fontSize: 29,
+    fontFamily: 'PlayfairDisplay_700Bold',
+    fontSize: 28,
     textAlign: 'center',
     color: themeLight.textPrimary,
   },
-  /* Subtext – Satoshi-Regular from assets */
+  /* Onboarding test typography: Plus Jakarta Sans 400, 15px */
   body: {
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
+    fontSize: 15,
     textAlign: 'center',
     color: themeLight.textSecondary,
+  },
+  /* Get started button text: Plus Jakarta Sans 600 (onboarding test only) */
+  getStartedButtonText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: themeLight.textInverse,
   },
   progressContainer: {
     flexDirection: 'row',

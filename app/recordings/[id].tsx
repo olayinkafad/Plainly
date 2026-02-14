@@ -880,7 +880,7 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 14, // --font-size-sm
     color: themeLight.textSecondary,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_500Medium',
   },
   tabTextActive: {
     color: themeLight.tabActiveText,
@@ -909,7 +909,7 @@ const styles = StyleSheet.create({
   addFormatText: {
     fontSize: 13,
     color: themeLight.accent,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans_500Medium',
     marginLeft: 4, // --space-1
   },
   addFormatTextDisabled: {

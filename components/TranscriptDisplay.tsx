@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   timestamp: {
     color: themeLight.textSecondary,
     fontSize: 11, // Slightly smaller than xs
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans_400Regular',
   },
   speakerLabel: {
     color: themeLight.textSecondary,
