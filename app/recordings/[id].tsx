@@ -81,28 +81,6 @@ export default function RecordingDetail() {
     }
   }, [id])
 
-  // Check magic moment on first ever result
-  useEffect(() => {
-    if (!recording || !isNew) return
-    const checkFirstResult = async () => {
-      try {
-        const seen = await AsyncStorage.getItem('@plainly_first_result_seen')
-        if (!seen) {
-          await AsyncStorage.setItem('@plainly_first_result_seen', 'true')
-          setShowMagicMoment(true)
-          Animated.timing(magicMomentAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }).start()
-        }
-      } catch {
-        // Fail silently
-      }
-    }
-    checkFirstResult()
-  }, [recording?.id, isNew])
-
   // Check first transcript view
   useEffect(() => {
     if (!recording || activeFormat !== 'transcript') return
@@ -122,11 +100,25 @@ export default function RecordingDetail() {
     checkFirstTranscript()
   }, [recording?.id, activeFormat])
 
-  // Toast + tooltip sequence only after a fresh generation
+  // New result sequence: magic moment + saved toast + tooltip
+  const isNewResult = Boolean(isNew) && isNew !== '0'
   useEffect(() => {
-    if (!recording || !isNew) return
+    if (!recording || !isNewResult) return
 
-    // Step 1: Fade in toast
+    // Magic moment — first ever result
+    AsyncStorage.getItem('@plainly_first_result_seen').then((seen) => {
+      if (!seen) {
+        AsyncStorage.setItem('@plainly_first_result_seen', 'true')
+        setShowMagicMoment(true)
+        Animated.timing(magicMomentAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }).start()
+      }
+    }).catch(() => {})
+
+    // Saved toast
     setShowSavedToast(true)
     Animated.timing(savedToastAnim, {
       toValue: 1,
@@ -134,7 +126,7 @@ export default function RecordingDetail() {
       useNativeDriver: true,
     }).start()
 
-    // Step 2: After 2s, fade out toast
+    // After 2s, fade out toast, then show tooltip
     toastTimerRef.current = setTimeout(() => {
       Animated.timing(savedToastAnim, {
         toValue: 0,
@@ -143,7 +135,6 @@ export default function RecordingDetail() {
       }).start(() => {
         setShowSavedToast(false)
 
-        // Step 3: Wait 500ms after toast is fully gone
         tooltipDelayRef.current = setTimeout(() => {
           checkAndShowTooltip()
         }, 500)
@@ -154,7 +145,7 @@ export default function RecordingDetail() {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       if (tooltipDelayRef.current) clearTimeout(tooltipDelayRef.current)
     }
-  }, [recording?.id])
+  }, [recording?.id, isNewResult])
 
   const checkAndShowTooltip = async () => {
     try {

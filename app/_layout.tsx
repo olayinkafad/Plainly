@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useFonts } from 'expo-font'
 import * as SplashScreen from 'expo-splash-screen'
 import { View, ActivityIndicator } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { themeLight } from '../constants/theme'
 import { AudioPlayerProvider } from '../contexts/AudioPlayerContext'
 import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold'
@@ -31,6 +32,24 @@ export default function RootLayout() {
       SplashScreen.hideAsync()
     }
   }, [fontsLoaded])
+
+  // DEV ONLY: Clear one-time emotional moment flags on app start for testing
+  // Remove this block before shipping to production
+  useEffect(() => {
+    if (__DEV__) {
+      AsyncStorage.multiRemove([
+        '@plainly_first_result_seen',
+        '@plainly_first_transcript_seen',
+        '@plainly_tooltip_result_tabs_seen',
+        '@plainly_milestone_5',
+        '@plainly_milestone_10',
+        '@plainly_milestone_25',
+        '@plainly_milestone_50',
+        '@plainly_milestone_100',
+        '@plainly_has_deleted_all',
+      ]).then(() => console.log('[DEV] Emotional moment flags cleared'))
+    }
+  }, [])
 
   // Log font errors for debugging
   useEffect(() => {
