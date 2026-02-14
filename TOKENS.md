@@ -98,6 +98,68 @@ Use Playfair Display (headings) + Plus Jakarta Sans (body) as primary typefaces 
 
 ---
 
+## Buttons
+
+### Primary
+- Background: `--color-accent-primary` (#C45D3E)
+- Text: `--color-text-inverse` (#FFFFFF), Jakarta 600
+- Border: none
+- Border radius: `--radius-full` (9999)
+- Padding: 16v / 24h
+- Min height: 44
+- Pressed: opacity 0.8
+
+### Secondary
+- Background: `--color-bg-tertiary` (#EDE6DF)
+- Text: `--color-text-primary` (#2C2826), Jakarta 600
+- Border: none
+- Border radius: `--radius-full` (9999)
+- Padding: 16v / 24h
+- Min height: 44
+- Pressed: opacity 0.8
+
+### Ghost
+- Background: transparent
+- Text: `--color-text-tertiary` (#B5AFA9), Jakarta 600
+- Border: none
+- Border radius: `--radius-full` (9999)
+- Padding: 16v / 24h
+- Min height: 44
+- Pressed: opacity 0.8
+
+### Destructive
+- Background: `--color-error` (#BF4A3A)
+- Text: `--color-text-inverse` (#FFFFFF), Jakarta 600
+- Border: none
+- Border radius: `--radius-full` (9999)
+- Padding: 16v / 24h
+- Min height: 44
+- Pressed: opacity 0.8
+
+---
+
+## Bottom Sheets
+
+### Sheet container
+- Background: `--color-card-bg` (#FFFFFF)
+- Border radius (top): `--radius-xl` (20)
+- Padding: `--space-4` (16) horizontal, `--space-4` (16) top
+
+### Sheet header
+- Title: Jakarta 600, `--font-size-md` (16), `--color-text-primary`
+- Close icon: size 20, `--color-text-secondary`
+- Close button: 44x44 min touch target
+- Margin bottom: `--space-4` (16)
+
+### Action rows (rename, delete, copy, share)
+- Icon: size 20, `--color-text-primary` (or `--color-error` for destructive)
+- Text: Jakarta 500, `--font-size-md` (16), `--color-text-primary` (or `--color-error` for destructive)
+- Row padding: `--space-4` (16) vertical
+- Icon-to-text gap: `--space-3` (12)
+- Pressed: opacity 0.7
+
+---
+
 Spacing Tokens
 --space-2: 8
 --space-3: 12

@@ -203,7 +203,9 @@ export default function RecordingDetail() {
 
   const handleRename = () => {
     setShowActionsSheet(false)
-    setShowRenameModal(true)
+    setTimeout(() => {
+      setShowRenameModal(true)
+    }, 50)
   }
 
   const handleSaveRename = async (newTitle: string) => {

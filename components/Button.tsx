@@ -76,9 +76,7 @@ const styles = StyleSheet.create({
     backgroundColor: themeLight.accent,
   },
   secondary: {
-    backgroundColor: themeLight.cardBg,
-    borderWidth: 1,
-    borderColor: themeLight.border,
+    backgroundColor: themeLight.bgTertiary,
   },
   ghost: {
     backgroundColor: 'transparent',

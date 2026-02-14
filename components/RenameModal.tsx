@@ -3,7 +3,7 @@ import { View, StyleSheet, Modal, Pressable, Animated, TextInput, Alert } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
 import { themeLight } from '../constants/theme'
-import { Title, Body } from './typography'
+import { Body } from './typography'
 import Button from './Button'
 
 interface RenameModalProps {
@@ -109,7 +109,7 @@ export default function RenameModal({
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerContent}>
-                <Title style={styles.sheetTitle}>Rename recording</Title>
+                <Body style={styles.sheetTitle}>Rename recording</Body>
                 <Pressable onPress={onClose} style={styles.closeButton}>
                   <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
@@ -185,7 +185,8 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     flex: 1,
-    fontSize: 18,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
     color: themeLight.textPrimary,
   },
   closeButton: {

@@ -33,11 +33,13 @@ export default function Home() {
   const toastAnim = useRef(new Animated.Value(0)).current
 
   // ── Mini Player State ──
+  const SPEED_OPTIONS = [1, 1.5, 2, 0.5] as const
   const [playingRecordingId, setPlayingRecordingId] = useState<string | null>(null)
   const [miniPlayerSound, setMiniPlayerSound] = useState<Audio.Sound | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackPosition, setPlaybackPosition] = useState(0)
   const [playbackDuration, setPlaybackDuration] = useState(0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const [miniPlayerVisible, setMiniPlayerVisible] = useState(false)
   const positionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const scrubberWidthRef = useRef(200)
@@ -147,7 +149,9 @@ export default function Home() {
 
   const handleRename = () => {
     setShowActionsSheet(false)
-    setShowRenameModal(true)
+    setTimeout(() => {
+      setShowRenameModal(true)
+    }, 50)
   }
 
   const handleSaveRename = async (newTitle: string) => {
@@ -254,6 +258,7 @@ export default function Home() {
       setPlayingRecordingId(rec.id)
       setIsPlaying(true)
       setPlaybackPosition(0)
+      setPlaybackSpeed(1)
 
       if (!miniPlayerVisible) {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
@@ -329,6 +334,20 @@ export default function Home() {
     }
   }
 
+  const cycleSpeed = async () => {
+    const currentIndex = SPEED_OPTIONS.indexOf(playbackSpeed as typeof SPEED_OPTIONS[number])
+    const nextIndex = (currentIndex + 1) % SPEED_OPTIONS.length
+    const nextSpeed = SPEED_OPTIONS[nextIndex]
+    setPlaybackSpeed(nextSpeed)
+    if (miniPlayerSound) {
+      try {
+        await miniPlayerSound.setRateAsync(nextSpeed, true)
+      } catch (e) {
+        // Ignore
+      }
+    }
+  }
+
   const closeMiniPlayer = async () => {
     if (miniPlayerSound) {
       try {
@@ -347,6 +366,7 @@ export default function Home() {
     setIsPlaying(false)
     setPlaybackPosition(0)
     setPlaybackDuration(0)
+    setPlaybackSpeed(1)
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
     setMiniPlayerVisible(false)
   }
@@ -466,7 +486,11 @@ export default function Home() {
                 <Body style={styles.miniTimeText}>
                   {formatTimeMs(playbackDuration)}
                 </Body>
-                <Body style={styles.miniSpeedLabel}>1x</Body>
+                <Pressable style={styles.miniSpeedPill} onPress={cycleSpeed}>
+                  <Body style={styles.miniSpeedText}>
+                    {playbackSpeed === 1 ? '1x' : playbackSpeed === 0.5 ? '0.5x' : `${playbackSpeed}x`}
+                  </Body>
+                </Pressable>
                 <Pressable
                   style={styles.miniCloseButton}
                   onPress={closeMiniPlayer}
@@ -761,13 +785,15 @@ const styles = StyleSheet.create({
 
   // ── Mini Audio Player ──
   miniPlayer: {
-    backgroundColor: themeLight.bgSecondary,
+    backgroundColor: '#FFFFFF',
     paddingVertical: 12,
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: themeLight.borderSubtle,
     borderBottomWidth: 1,
-    borderBottomColor: themeLight.border,
+    borderBottomColor: themeLight.borderSubtle,
   },
   miniPlayButton: {
     width: 36,
@@ -795,11 +821,19 @@ const styles = StyleSheet.create({
     backgroundColor: themeLight.accent,
     borderRadius: 1.5,
   },
-  miniSpeedLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
-    color: themeLight.textSecondary,
+  miniSpeedPill: {
+    backgroundColor: themeLight.bgTertiary,
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     marginLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  miniSpeedText: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 12,
+    color: themeLight.textPrimary,
   },
   miniCloseButton: {
     marginLeft: 12,

@@ -86,7 +86,7 @@ export default function RecordingActionsSheet({
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerContent}>
-                <Title style={styles.sheetTitle}>{recordingTitle}</Title>
+                <Body style={styles.sheetTitle}>{recordingTitle}</Body>
                 <Pressable onPress={handleClose} style={styles.closeButton}>
                   <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
@@ -168,7 +168,8 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     flex: 1,
-    fontSize: 18,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
     color: themeLight.textPrimary,
   },
   closeButton: {
@@ -189,6 +190,7 @@ const styles = StyleSheet.create({
     gap: 12, // --space-3
   },
   actionText: {
+    fontFamily: 'PlusJakartaSans_500Medium',
     fontSize: 16,
     color: themeLight.textPrimary,
   },

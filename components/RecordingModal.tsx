@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, usePathname } from 'expo-router'
 import Icon from './Icon'
 import { Title, Body } from './typography'
+import Button from './Button'
 import { Recording, recordingsStore } from '../store/recordings'
 import { themeLight } from '../constants/theme'
 
@@ -760,24 +761,22 @@ export default function RecordingModal({
               <Title style={styles.discardTitle}>Discard this recording?</Title>
               <Body style={styles.discardSubtext}>Your recording will be lost.</Body>
               <View style={styles.discardButtonRow}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.discardCancelBtn,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                  onPress={() => setShowDiscardConfirm(false)}
-                >
-                  <Body style={styles.discardCancelText}>Cancel</Body>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.discardConfirmBtn,
-                    pressed && { opacity: 0.8 },
-                  ]}
-                  onPress={handleConfirmDiscard}
-                >
-                  <Body style={styles.discardConfirmText}>Discard</Body>
-                </Pressable>
+                <View style={styles.discardBtnContainer}>
+                  <Button variant="secondary" fullWidth onPress={() => setShowDiscardConfirm(false)}>
+                    Cancel
+                  </Button>
+                </View>
+                <View style={styles.discardBtnContainer}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.discardConfirmBtn,
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    onPress={handleConfirmDiscard}
+                  >
+                    <Body style={styles.discardConfirmText}>Discard</Body>
+                  </Pressable>
+                </View>
               </View>
             </View>
           </View>
@@ -1031,24 +1030,17 @@ const styles = StyleSheet.create({
     gap: 12,
     width: '100%',
   },
-  discardCancelBtn: {
+  discardBtnContainer: {
     flex: 1,
-    backgroundColor: themeLight.bgTertiary,
-    paddingVertical: 16,
-    borderRadius: 26,
-    alignItems: 'center',
-  },
-  discardCancelText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 16,
-    color: themeLight.textPrimary,
   },
   discardConfirmBtn: {
-    flex: 1,
-    backgroundColor: themeLight.error,
     paddingVertical: 16,
-    borderRadius: 26,
+    paddingHorizontal: 24,
+    borderRadius: 9999,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: themeLight.error,
   },
   discardConfirmText: {
     fontFamily: 'PlusJakartaSans_600SemiBold',

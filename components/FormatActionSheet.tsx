@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, Modal, Animated } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import Icon from './Icon'
 import { themeLight } from '../constants/theme'
-import { Title, Body } from './typography'
+import { Body } from './typography'
 import { OutputType } from '../types'
 
 interface FormatOption {
@@ -107,7 +107,7 @@ export default function FormatActionSheet({
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.headerContent}>
-                <Title style={styles.sheetTitle}>{getActionTitle()}</Title>
+                <Body style={styles.sheetTitle}>{getActionTitle()}</Body>
                 <Pressable onPress={onClose} style={styles.closeButton}>
                   <Icon name="x" size={20} color={themeLight.textSecondary} />
                 </Pressable>
@@ -175,7 +175,8 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     flex: 1,
-    fontSize: 18,
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
     color: themeLight.textPrimary,
   },
   closeButton: {
@@ -199,6 +200,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   actionText: {
+    fontFamily: 'PlusJakartaSans_500Medium',
     fontSize: 16,
     color: themeLight.textPrimary,
   },
