@@ -98,19 +98,26 @@ Use Playfair Display (headings) + Plus Jakarta Sans (body) as primary typefaces 
 
 ---
 
-## Spacing Tokens
-
-- `--space-2`: 8
-- `--space-3`: 12
-- `--space-4`: 16
-- `--space-5`: 20
-- `--space-6`: 24
-- `--space-8`: 32
-
----
-
-## Border radius
-
-- `--radius-sm`: 6
-- `--radius-md`: 10
-- `--radius-lg`: 14
+Spacing Tokens
+--space-2: 8
+--space-3: 12
+--space-4: 16
+--space-5: 20
+--space-6: 24
+--space-8: 32
+Why:
+Consistent spacing creates rhythm and visual trust.
+Border Radius
+--radius-sm: 6
+--radius-md: 10
+--radius-lg: 14
+--radius-xl: 20
+--radius-full: 9999
+Usage:
+sm → Small buttons, tags, badges
+md → Input fields, cards
+lg → Modals, larger cards
+xl → Illustration areas, onboarding cards
+full → Circular buttons (mic button), pills, avatar, pagination dots
+Why:
+Rounded corners should feel soft, not playful.
