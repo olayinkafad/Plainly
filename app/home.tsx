@@ -8,10 +8,8 @@ import Icon from '../components/Icon'
 import { format } from 'date-fns'
 import { Title, Body, Meta } from '../components/typography'
 import { recordingsStore, Recording } from '../store/recordings'
-import { OutputType } from '../types'
 import RecordingActionsSheet from '../components/RecordingActionsSheet'
 import RecordingModal from '../components/RecordingModal'
-import FormatSelectionModal from '../components/FormatSelectionModal'
 import RenameModal from '../components/RenameModal'
 import MicPermissionSheet from '../components/MicPermissionSheet'
 import { themeLight } from '../constants/theme'
@@ -26,8 +24,6 @@ export default function Home() {
   const [showActionsSheet, setShowActionsSheet] = useState(false)
   const [showRenameModal, setShowRenameModal] = useState(false)
   const [showRecordingModal, setShowRecordingModal] = useState(false)
-  const [showFormatSelection, setShowFormatSelection] = useState(false)
-  const [formatSelectionRecordingId, setFormatSelectionRecordingId] = useState<string | null>(null)
   const [showToast, setShowToast] = useState(false)
   const [showMicPermission, setShowMicPermission] = useState(false)
   const toastAnim = useRef(new Animated.Value(0)).current
@@ -175,17 +171,10 @@ export default function Home() {
     }, 3000)
   }
 
-  const handleFormatSelect = (recordingId: string) => {
-    setFormatSelectionRecordingId(recordingId)
-    setShowFormatSelection(true)
-  }
-
-  const handleGenerate = (recordingId: string, format: OutputType) => {
-    setShowFormatSelection(false)
-    setFormatSelectionRecordingId(null)
+  const handleProcessingComplete = (recordingId: string) => {
     router.push({
       pathname: '/generating',
-      params: { recordingId, format },
+      params: { recordingId, format: 'summary' },
     })
   }
 
@@ -456,21 +445,8 @@ export default function Home() {
         isOpen={showRecordingModal}
         onClose={() => setShowRecordingModal(false)}
         onSave={handleSaveRecording}
-        onFormatSelect={handleFormatSelect}
+        onFormatSelect={handleProcessingComplete}
       />
-
-      {/* Format Selection Modal */}
-      {formatSelectionRecordingId && showFormatSelection && (
-        <FormatSelectionModal
-          isOpen={showFormatSelection}
-          recordingId={formatSelectionRecordingId}
-          onClose={() => {
-            setShowFormatSelection(false)
-            setFormatSelectionRecordingId(null)
-          }}
-          onGenerate={handleGenerate}
-        />
-      )}
 
       {/* Mic Permission Sheet */}
       <MicPermissionSheet

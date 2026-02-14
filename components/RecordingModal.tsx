@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, ScrollView } from 'react-native'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { View, StyleSheet, Modal, Pressable, Animated, Dimensions, ScrollView, Easing } from 'react-native'
 import { Audio } from 'expo-av'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -20,6 +20,13 @@ interface RecordingModalProps {
 type RecordingState = 'idle' | 'recording' | 'paused'
 
 const WAVEFORM_BAR_COUNT = 25
+
+const PROCESSING_STEPS = [
+  'Listening back',
+  'Transcribing',
+  'Summarizing',
+  'Finishing touches',
+]
 
 // Pre-computed static bar heights for visual variety (taller in center, shorter at edges)
 const BAR_HEIGHTS = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, i) => {
@@ -49,7 +56,65 @@ export default function RecordingModal({
     Array.from({ length: WAVEFORM_BAR_COUNT }, () => new Animated.Value(0.3))
   ).current
 
+  // ── Processing phase state ──
+  const [phase, setPhase] = useState<'recording' | 'processing'>('recording')
+  const [activeStep, setActiveStep] = useState(-1)
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set())
+  const savedRecordingIdRef = useRef<string | null>(null)
+  const stepTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  // Phase crossfade animations
+  const recordingViewOpacity = useRef(new Animated.Value(1)).current
+  const processingViewOpacity = useRef(new Animated.Value(0)).current
+
+  // Step animations: each step has opacity, translateY, checkScale
+  const stepAnims = useRef(
+    PROCESSING_STEPS.map(() => ({
+      opacity: new Animated.Value(0),
+      translateY: new Animated.Value(12),
+      checkScale: new Animated.Value(0),
+    }))
+  ).current
+
+  // Dot bounce animations (3 dots for active step indicator)
+  const dotScales = useRef([
+    new Animated.Value(0.6),
+    new Animated.Value(0.6),
+    new Animated.Value(0.6),
+  ]).current
+  const dotLoopRef = useRef<Animated.CompositeAnimation | null>(null)
+
   const { height: SCREEN_HEIGHT } = Dimensions.get('window')
+
+  // ── Reset processing state ──
+  const resetProcessingState = useCallback(() => {
+    // Clear all step timeouts
+    stepTimeoutsRef.current.forEach(t => clearTimeout(t))
+    stepTimeoutsRef.current = []
+
+    setPhase('recording')
+    setActiveStep(-1)
+    setCompletedSteps(new Set())
+    savedRecordingIdRef.current = null
+
+    // Reset crossfade
+    recordingViewOpacity.setValue(1)
+    processingViewOpacity.setValue(0)
+
+    // Reset step animations
+    stepAnims.forEach(s => {
+      s.opacity.setValue(0)
+      s.translateY.setValue(12)
+      s.checkScale.setValue(0)
+    })
+
+    // Stop and reset dot animations
+    if (dotLoopRef.current) {
+      dotLoopRef.current.stop()
+      dotLoopRef.current = null
+    }
+    dotScales.forEach(d => d.setValue(0.6))
+  }, [recordingViewOpacity, processingViewOpacity, stepAnims, dotScales])
 
   useEffect(() => {
     if (isOpen) {
@@ -60,8 +125,14 @@ export default function RecordingModal({
         friction: 11,
       }).start()
       hasStartedRef.current = false
-      resetRecording()
-      requestPermissionsAndStart()
+      resetProcessingState()
+
+      // Await cleanup before starting a new recording
+      const init = async () => {
+        await resetRecording()
+        await requestPermissionsAndStart()
+      }
+      init()
     } else {
       Animated.timing(slideAnim, {
         toValue: 0,
@@ -69,6 +140,7 @@ export default function RecordingModal({
         useNativeDriver: true,
       }).start()
       resetRecording()
+      resetProcessingState()
       hasStartedRef.current = false
       setShowDiscardConfirm(false)
     }
@@ -216,18 +288,18 @@ export default function RecordingModal({
 
         await onSave(newRecording, false)
 
+        // Store ID for after processing animation completes
+        savedRecordingIdRef.current = newRecording.id
+
+        // Stop recording UI
         setRecordingState('idle')
-        setDuration(0)
         setHasRecording(false)
         stopTimer()
         stopWaveformAnimation()
         hasStartedRef.current = false
 
-        onClose()
-
-        setTimeout(() => {
-          onFormatSelect(newRecording.id)
-        }, 300)
+        // Transition to processing phase
+        startProcessingPhase()
       }
     } catch (error) {
       console.error('Failed to save recording:', error)
@@ -321,9 +393,153 @@ export default function RecordingModal({
     })
   }
 
+  // ── Processing Phase ──
+
+  const startDotBounce = () => {
+    if (dotLoopRef.current) {
+      dotLoopRef.current.stop()
+    }
+    dotScales.forEach(d => d.setValue(0.6))
+
+    const createDotAnim = (dotAnim: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dotAnim, {
+            toValue: 1.0,
+            duration: 400,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(dotAnim, {
+            toValue: 0.6,
+            duration: 400,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          // Pad to fill the 1.2s loop
+          Animated.delay(400 - delay),
+        ])
+      )
+
+    const loop = Animated.parallel([
+      createDotAnim(dotScales[0], 0),
+      createDotAnim(dotScales[1], 150),
+      createDotAnim(dotScales[2], 300),
+    ])
+    dotLoopRef.current = loop
+    loop.start()
+  }
+
+  const stopDotBounce = () => {
+    if (dotLoopRef.current) {
+      dotLoopRef.current.stop()
+      dotLoopRef.current = null
+    }
+    dotScales.forEach(d => d.setValue(0.6))
+  }
+
+  const activateStep = (index: number) => {
+    setActiveStep(index)
+    startDotBounce()
+
+    // Fade in + slide up
+    Animated.parallel([
+      Animated.timing(stepAnims[index].opacity, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(stepAnims[index].translateY, {
+        toValue: 0,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+    ]).start()
+
+    // Schedule completion
+    const delay = index === 3 ? 1500 : 2000
+    const t = setTimeout(() => {
+      completeStep(index)
+    }, delay)
+    stepTimeoutsRef.current.push(t)
+  }
+
+  const completeStep = (index: number) => {
+    setCompletedSteps(prev => new Set(prev).add(index))
+    stopDotBounce()
+
+    // Checkmark pop: scale 0 → 1.1 → 1.0
+    Animated.sequence([
+      Animated.timing(stepAnims[index].checkScale, {
+        toValue: 1.1,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }),
+      Animated.timing(stepAnims[index].checkScale, {
+        toValue: 1.0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start()
+
+    if (index < PROCESSING_STEPS.length - 1) {
+      // Activate next step after brief gap
+      const t = setTimeout(() => {
+        activateStep(index + 1)
+      }, 200)
+      stepTimeoutsRef.current.push(t)
+    } else {
+      // All steps done — finish after brief pause
+      const t = setTimeout(() => {
+        finishProcessing()
+      }, 800)
+      stepTimeoutsRef.current.push(t)
+    }
+  }
+
+  const startProcessingPhase = () => {
+    setPhase('processing')
+
+    // Crossfade: recording out, processing in
+    Animated.parallel([
+      Animated.timing(recordingViewOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(processingViewOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Start first step immediately after crossfade
+      activateStep(0)
+    })
+  }
+
+  const finishProcessing = () => {
+    const savedId = savedRecordingIdRef.current
+    resetProcessingState()
+    setDuration(0)
+
+    onClose()
+
+    if (savedId) {
+      setTimeout(() => {
+        onFormatSelect(savedId)
+      }, 300)
+    }
+  }
+
   // ── Discard ──
 
   const handleClose = () => {
+    if (phase === 'processing') return // Cannot cancel during processing
     if (hasRecording && (recordingState === 'recording' || recordingState === 'paused')) {
       setShowDiscardConfirm(true)
     } else {
@@ -362,113 +578,178 @@ export default function RecordingModal({
             { transform: [{ translateY }] },
           ]}
         >
-          {/* ── Top: Live Transcript Section ── */}
-          <View style={[styles.transcriptSection, { paddingTop: insets.top }]}>
-            {/* Close button */}
-            <Pressable
-              onPress={handleClose}
-              style={styles.closeButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Close recording"
-              accessibilityRole="button"
-            >
-              <Icon name="x" size={24} color={themeLight.textTertiary} />
-            </Pressable>
-
-            <ScrollView
-              style={styles.transcriptScroll}
-              contentContainerStyle={styles.transcriptScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.transcriptCard}>
-                <Body style={styles.cardHeading}>Here's what you said so far</Body>
-                <View style={styles.cardDivider} />
-                <Body style={styles.placeholderText}>
-                  Your transcript will appear here once we process your recording.
-                </Body>
-              </View>
-            </ScrollView>
-
-            {/* Gradient fade at bottom of scroll area */}
-            <LinearGradient
-              colors={['rgba(253, 252, 251, 0)', themeLight.bgPrimary]}
-              style={styles.scrollGradient}
-              pointerEvents="none"
-            />
-          </View>
-
-          {/* ── Bottom: Recording Controls Section ── */}
-          <View style={[styles.controlsSection, { paddingBottom: insets.bottom + 28 }]}>
-            {/* Timer */}
-            <Body style={styles.timer}>{formatTime(duration)}</Body>
-
-            {/* Status text */}
-            {recordingState === 'recording' && (
-              <>
-                <Title style={styles.listeningText}>I'm listening...</Title>
-                <Body style={styles.subtitleText}>Speak naturally. No need to rehearse.</Body>
-              </>
-            )}
-            {recordingState === 'paused' && (
-              <>
-                <Title style={styles.listeningText}>Recording paused</Title>
-                <Body style={styles.subtitleText}>Tap resume to continue.</Body>
-              </>
-            )}
-
-            {/* Waveform */}
-            {(recordingState === 'recording' || recordingState === 'paused') && (
-              <View style={styles.waveformContainer}>
-                {waveformAnimations.map((anim, index) => (
-                  <Animated.View
-                    key={index}
-                    style={[
-                      styles.waveformBar,
-                      {
-                        height: BAR_HEIGHTS[index],
-                        opacity: anim,
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-            )}
-
-            {/* Buttons */}
-            <View style={styles.buttonRow}>
-              {/* Pause / Resume */}
+          {/* ── Recording View (fades out during processing) ── */}
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity: recordingViewOpacity }]}
+            pointerEvents={phase === 'processing' ? 'none' : 'auto'}
+          >
+            {/* ── Top: Live Transcript Section ── */}
+            <View style={[styles.transcriptSection, { paddingTop: insets.top }]}>
+              {/* Close button */}
               <Pressable
-                style={({ pressed }) => [
-                  styles.pauseButton,
-                  pressed && styles.pauseButtonPressed,
-                ]}
-                onPress={recordingState === 'recording' ? pauseRecording : resumeRecording}
-                disabled={!hasRecording}
+                onPress={handleClose}
+                style={styles.closeButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityLabel="Close recording"
+                accessibilityRole="button"
               >
-                <Body style={styles.pauseButtonText}>
-                  {recordingState === 'recording' ? 'Pause' : 'Resume'}
-                </Body>
-                <Icon
-                  name={recordingState === 'recording' ? 'pause' : 'play'}
-                  size={16}
-                  color={themeLight.textPrimary}
-                />
+                <Icon name="x" size={24} color={themeLight.textTertiary} />
               </Pressable>
 
-              {/* Tap to complete */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.completeButton,
-                  pressed && styles.completeButtonPressed,
-                ]}
-                onPress={stopRecording}
-                disabled={!hasRecording}
+              <ScrollView
+                style={styles.transcriptScroll}
+                contentContainerStyle={styles.transcriptScrollContent}
+                showsVerticalScrollIndicator={false}
               >
-                <Body style={styles.completeButtonText}>Tap to complete</Body>
-                <Icon name="check" size={16} color="#FFFFFF" />
-              </Pressable>
+                <View style={styles.transcriptCard}>
+                  <Body style={styles.cardHeading}>Here's what you said so far</Body>
+                  <View style={styles.cardDivider} />
+                  <Body style={styles.placeholderText}>
+                    Your transcript will appear here once we process your recording.
+                  </Body>
+                </View>
+              </ScrollView>
+
+              {/* Gradient fade at bottom of scroll area */}
+              <LinearGradient
+                colors={['rgba(253, 252, 251, 0)', themeLight.bgPrimary]}
+                style={styles.scrollGradient}
+                pointerEvents="none"
+              />
             </View>
-          </View>
+
+            {/* ── Bottom: Recording Controls Section ── */}
+            <View style={[styles.controlsSection, { paddingBottom: insets.bottom + 28 }]}>
+              {/* Timer */}
+              <Body style={styles.timer}>{formatTime(duration)}</Body>
+
+              {/* Status text */}
+              {recordingState === 'recording' && (
+                <>
+                  <Title style={styles.listeningText}>I'm listening...</Title>
+                  <Body style={styles.subtitleText}>Speak naturally. No need to rehearse.</Body>
+                </>
+              )}
+              {recordingState === 'paused' && (
+                <>
+                  <Title style={styles.listeningText}>Recording paused</Title>
+                  <Body style={styles.subtitleText}>Tap resume to continue.</Body>
+                </>
+              )}
+
+              {/* Waveform */}
+              {(recordingState === 'recording' || recordingState === 'paused') && (
+                <View style={styles.waveformContainer}>
+                  {waveformAnimations.map((anim, index) => (
+                    <Animated.View
+                      key={index}
+                      style={[
+                        styles.waveformBar,
+                        {
+                          height: BAR_HEIGHTS[index],
+                          opacity: anim,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {/* Buttons */}
+              <View style={styles.buttonRow}>
+                {/* Pause / Resume */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.pauseButton,
+                    pressed && styles.pauseButtonPressed,
+                  ]}
+                  onPress={recordingState === 'recording' ? pauseRecording : resumeRecording}
+                  disabled={!hasRecording}
+                >
+                  <Body style={styles.pauseButtonText}>
+                    {recordingState === 'recording' ? 'Pause' : 'Resume'}
+                  </Body>
+                  <Icon
+                    name={recordingState === 'recording' ? 'pause' : 'play'}
+                    size={16}
+                    color={themeLight.textPrimary}
+                  />
+                </Pressable>
+
+                {/* Tap to complete */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.completeButton,
+                    pressed && styles.completeButtonPressed,
+                  ]}
+                  onPress={stopRecording}
+                  disabled={!hasRecording}
+                >
+                  <Body style={styles.completeButtonText}>Tap to complete</Body>
+                  <Icon name="check" size={16} color="#FFFFFF" />
+                </Pressable>
+              </View>
+            </View>
+          </Animated.View>
+
+          {/* ── Processing View (fades in during processing) ── */}
+          <Animated.View
+            style={[StyleSheet.absoluteFill, { opacity: processingViewOpacity }]}
+            pointerEvents={phase === 'processing' ? 'auto' : 'none'}
+          >
+            <View style={styles.processingContainer}>
+              <View style={styles.stepsGroup}>
+                {PROCESSING_STEPS.map((label, i) => {
+                  if (i > activeStep) return null
+                  const isCompleted = completedSteps.has(i)
+                  return (
+                    <Animated.View
+                      key={i}
+                      style={[
+                        styles.stepRow,
+                        i > 0 && styles.stepRowSpacing,
+                        {
+                          opacity: stepAnims[i].opacity,
+                          transform: [{ translateY: stepAnims[i].translateY }],
+                        },
+                      ]}
+                    >
+                      {/* Indicator */}
+                      <View style={styles.stepIndicator}>
+                        {isCompleted ? (
+                          <Animated.View
+                            style={[
+                              styles.checkCircle,
+                              { transform: [{ scale: stepAnims[i].checkScale }] },
+                            ]}
+                          >
+                            <Icon name="check" size={14} color="#FFFFFF" />
+                          </Animated.View>
+                        ) : (
+                          <View style={styles.dotRow}>
+                            {dotScales.map((dotScale, di) => (
+                              <Animated.View
+                                key={di}
+                                style={[
+                                  styles.dot,
+                                  { transform: [{ scale: dotScale }] },
+                                ]}
+                              />
+                            ))}
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Label */}
+                      <Body style={isCompleted ? styles.stepTextCompleted : styles.stepTextActive}>
+                        {label}
+                      </Body>
+                    </Animated.View>
+                  )
+                })}
+              </View>
+            </View>
+          </Animated.View>
         </Animated.View>
 
         {/* ── Discard Confirmation Overlay ── */}
@@ -657,6 +938,63 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_600SemiBold',
     fontSize: 15,
     color: '#FFFFFF',
+  },
+
+  // ── Processing View ──
+  processingContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  stepsGroup: {
+    alignItems: 'flex-start',
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepRowSpacing: {
+    marginTop: 32,
+  },
+  stepIndicator: {
+    width: 34,
+    height: 24,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: themeLight.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: themeLight.accent,
+  },
+  stepTextActive: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 16,
+    color: themeLight.textPrimary,
+    marginLeft: 12,
+  },
+  stepTextCompleted: {
+    fontFamily: 'PlusJakartaSans_500Medium',
+    fontSize: 16,
+    color: themeLight.textPrimary,
+    marginLeft: 12,
   },
 
   // ── Discard Confirmation ──
