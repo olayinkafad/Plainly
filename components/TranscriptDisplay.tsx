@@ -29,17 +29,6 @@ function renderTextWithFillers(text: string) {
   })
 }
 
-const formatTimestamp = (seconds: number): string => {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
-
-  if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-  return `${minutes}:${secs.toString().padStart(2, '0')}`
-}
-
 export default function TranscriptDisplay({ transcript }: TranscriptDisplayProps) {
   const { segments, speaker_separation, confidence_notes } = transcript
 
@@ -60,14 +49,9 @@ export default function TranscriptDisplay({ transcript }: TranscriptDisplayProps
       <View style={styles.segmentsContainer}>
         {segments.map((segment, index) => (
           <View key={index} style={styles.segment}>
-            <View style={styles.segmentHeader}>
-              <Meta style={styles.timestamp}>
-                {formatTimestamp(segment.start)}
-              </Meta>
-              {speaker_separation === 'provided' && (
-                <Meta style={styles.speakerLabel}>{segment.speaker}</Meta>
-              )}
-            </View>
+            {speaker_separation === 'provided' && (
+              <Meta style={styles.speakerLabel}>{segment.speaker}</Meta>
+            )}
             <Body style={styles.segmentTextContainer}>
               {renderTextWithFillers(segment.text)}
             </Body>
@@ -101,23 +85,13 @@ const styles = StyleSheet.create({
   segment: {
     marginBottom: 0,
   },
-  segmentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  timestamp: {
-    color: themeLight.textSecondary,
-    fontSize: 11,
-    fontFamily: 'PlusJakartaSans_400Regular',
-  },
   speakerLabel: {
     color: themeLight.textSecondary,
     fontSize: 12,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 4,
   },
   segmentTextContainer: {
     fontSize: 16,
