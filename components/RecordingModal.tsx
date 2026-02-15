@@ -12,6 +12,7 @@ import { Recording, recordingsStore } from '../store/recordings'
 import { themeLight } from '../constants/theme'
 import { transcribeAudio, generateOutputs, generateRecordingTitle } from '../lib/api'
 import { StructuredSummary, StructuredTranscript } from '../types'
+import EmptyStateAnimation from './EmptyStateAnimation'
 
 interface RecordingModalProps {
   isOpen: boolean
@@ -1149,7 +1150,7 @@ export default function RecordingModal({
               {processingError && errorType === 'network' ? (
                 /* ── Network Error (upload failed) ── */
                 <View style={styles.processingErrorContainer}>
-                  <Icon name="wifi-slash" size={32} color={themeLight.accent} style={{ marginBottom: 16 }} />
+                  <EmptyStateAnimation size="small" />
                   <Title style={styles.processingErrorTitle}>No connection</Title>
                   <Body style={styles.processingErrorBody}>
                     Your recording is saved on your device.
@@ -1212,6 +1213,7 @@ export default function RecordingModal({
                       )
                     })}
                   </View>
+                  <EmptyStateAnimation size="small" />
                   <Body style={styles.midwayErrorSubtext}>
                     We saved your recording. We'll try processing it again.
                   </Body>
@@ -1295,6 +1297,9 @@ export default function RecordingModal({
                   {/* Timeout message */}
                   {timeoutMessage && (
                     <View style={styles.timeoutMessageContainer}>
+                      {timeoutMessage.includes('come back') && (
+                        <EmptyStateAnimation size="small" />
+                      )}
                       <Body style={styles.timeoutMessageText}>{timeoutMessage}</Body>
                       {timeoutMessage.includes('come back') && (
                         <Pressable

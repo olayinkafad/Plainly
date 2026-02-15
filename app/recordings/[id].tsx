@@ -18,6 +18,7 @@ import TranscriptDisplay from '../../components/TranscriptDisplay'
 import SummaryDisplay from '../../components/SummaryDisplay'
 import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput } from '../../types'
 import { themeLight } from '../../constants/theme'
+import EmptyStateAnimation from '../../components/EmptyStateAnimation'
 
 const TOOLTIP_STORAGE_KEY = '@plainly_tooltip_result_tabs_seen'
 
@@ -763,6 +764,7 @@ export default function RecordingDetail() {
               const emptyState = getEmptyStateContent(activeFormat, recording.outputs)
               return (
                 <View style={styles.emptyContentContainer}>
+                  <EmptyStateAnimation />
                   <Title style={styles.emptyTitle}>{emptyState.title}</Title>
                   <Body style={styles.emptyBody}>{emptyState.body}</Body>
                   {emptyState.link && emptyState.linkTarget && (
