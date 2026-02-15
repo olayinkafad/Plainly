@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { View, StyleSheet, Pressable, Modal, Animated, Image, Linking } from 'react-native'
+import { View, StyleSheet, Pressable, Modal, Animated, Linking } from 'react-native'
 import { BlurView } from 'expo-blur'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import LottieView from 'lottie-react-native'
 import Icon from './Icon'
 import { themeLight } from '../constants/theme'
 import { Title, Body } from './typography'
@@ -130,10 +131,12 @@ export default function MicPermissionSheet({
 
                 {/* Illustration */}
                 <View style={styles.illustrationContainer}>
-                  <Image
-                    source={require('../assets/images/first-time-user-avatar.png')}
-                    style={styles.illustration}
-                    resizeMode="contain"
+                  <LottieView
+                    source={require('../assets/Voicemail.json')}
+                    style={styles.illustrationLottie}
+                    autoPlay
+                    loop
+                    speed={0.8}
                   />
                 </View>
 
@@ -205,7 +208,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 24,
   },
-  illustration: {
+  illustrationLottie: {
     width: 180,
     height: 180,
   },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, FlatList, Pressable, Alert, Image, Animated, LayoutAnimation, Platform, UIManager, Easing } from 'react-native'
+import { View, Text, StyleSheet, FlatList, Pressable, Alert, Animated, LayoutAnimation, Platform, UIManager, Easing } from 'react-native'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -740,10 +740,12 @@ export default function Home() {
               Your recordings will show up here.
             </Body>
             <View style={styles.illustrationContainer}>
-              <Image
-                source={require('../assets/images/first-time-user-avatar.png')}
-                style={styles.illustrationImage}
-                resizeMode="contain"
+              <LottieView
+                source={require('../assets/Voicemail.json')}
+                style={styles.illustrationLottie}
+                autoPlay
+                loop
+                speed={0.8}
               />
             </View>
           </View>
@@ -987,17 +989,14 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_400Regular',
   },
   illustrationContainer: {
-    width: '100%',
-    maxWidth: 240,
-    aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 32,
     alignSelf: 'center',
   },
-  illustrationImage: {
-    width: '100%',
-    height: '100%',
+  illustrationLottie: {
+    width: 240,
+    height: 240,
   },
 
   // ── Bottom Overlay (shared) ──
