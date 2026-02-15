@@ -132,7 +132,7 @@ export default function MicPermissionSheet({
                 {/* Illustration */}
                 <View style={styles.illustrationContainer}>
                   <LottieView
-                    source={require('../assets/Voicemail.json')}
+                    source={require('../assets/voicemail-new.json')}
                     style={styles.illustrationLottie}
                     autoPlay
                     loop

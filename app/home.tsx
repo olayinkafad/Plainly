@@ -555,10 +555,12 @@ export default function Home() {
     innerButtonScale.setValue(1)
   }
 
-  // Start breathing animation (always active unless scrolling)
+  // Start breathing animation (only when recordings exist and not scrolling)
   useEffect(() => {
-    if (!isScrollingRef.current) {
+    if (recordings.length > 0 && !isScrollingRef.current) {
       startBreathingAnimation()
+    } else {
+      stopBreathingAnimation()
     }
     return () => stopBreathingAnimation()
   }, [recordings.length])
@@ -741,7 +743,7 @@ export default function Home() {
             </Body>
             <View style={styles.illustrationContainer}>
               <LottieView
-                source={require('../assets/Voicemail.json')}
+                source={require('../assets/voicemail-new.json')}
                 style={styles.illustrationLottie}
                 autoPlay
                 loop
