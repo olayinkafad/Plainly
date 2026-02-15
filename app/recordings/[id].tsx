@@ -13,6 +13,7 @@ import AudioPlayer, { AudioPlayerHandle } from '../../components/AudioPlayer'
 import RecordingActionsSheet from '../../components/RecordingActionsSheet'
 import RenameModal from '../../components/RenameModal'
 import { generateRecordingTitle } from '../../lib/api'
+import LottieView from 'lottie-react-native'
 import TranscriptDisplay from '../../components/TranscriptDisplay'
 import SummaryDisplay from '../../components/SummaryDisplay'
 import { StructuredTranscript, TranscriptOutput, StructuredSummary, SummaryOutput } from '../../types'
@@ -47,6 +48,11 @@ export default function RecordingDetail() {
   const renamedToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasAutoTitledRef = useRef(false)
   const audioPlayerRef = useRef<AudioPlayerHandle>(null)
+
+  // Lottie refs for toast checkmarks
+  const savedLottieRef = useRef<LottieView>(null)
+  const copiedLottieRef = useRef<LottieView>(null)
+  const renamedLottieRef = useRef<LottieView>(null)
 
   // Toast state
   const [showSavedToast, setShowSavedToast] = useState(false)
@@ -125,6 +131,7 @@ export default function RecordingDetail() {
       duration: 300,
       useNativeDriver: true,
     }).start()
+    setTimeout(() => savedLottieRef.current?.play(45, 74), 100)
 
     // After 2s, fade out toast, then show tooltip
     toastTimerRef.current = setTimeout(() => {
@@ -299,6 +306,7 @@ export default function RecordingDetail() {
       duration: 300,
       useNativeDriver: true,
     }).start()
+    setTimeout(() => renamedLottieRef.current?.play(45, 74), 100)
 
     renamedToastTimerRef.current = setTimeout(() => {
       Animated.timing(renamedToastAnim, {
@@ -394,6 +402,7 @@ export default function RecordingDetail() {
       duration: 300,
       useNativeDriver: true,
     }).start()
+    setTimeout(() => copiedLottieRef.current?.play(45, 74), 100)
 
     copiedToastTimerRef.current = setTimeout(() => {
       Animated.timing(copiedToastAnim, {
@@ -700,7 +709,14 @@ export default function RecordingDetail() {
           pointerEvents="none"
         >
           <Body style={styles.savedToastText}>Saved</Body>
-          <Icon name="check" size={16} color="#FFFFFF" />
+          <LottieView
+            ref={savedLottieRef}
+            source={require('../../assets/loading-complete.json')}
+            style={styles.toastLottie}
+            loop={false}
+            autoPlay={false}
+            colorFilters={[{ keypath: 'circle', color: '#7DA17E' }]}
+          />
         </Animated.View>
       )}
 
@@ -907,7 +923,14 @@ export default function RecordingDetail() {
           pointerEvents="none"
         >
           <Body style={styles.copiedToastText}>Copied</Body>
-          <Icon name="check" size={16} color="#FFFFFF" />
+          <LottieView
+            ref={copiedLottieRef}
+            source={require('../../assets/loading-complete.json')}
+            style={styles.toastLottie}
+            loop={false}
+            autoPlay={false}
+            colorFilters={[{ keypath: 'circle', color: '#7DA17E' }]}
+          />
         </Animated.View>
       )}
 
@@ -931,7 +954,14 @@ export default function RecordingDetail() {
           pointerEvents="none"
         >
           <Body style={styles.renamedToastText}>Name saved</Body>
-          <Icon name="check" size={16} color="#FFFFFF" />
+          <LottieView
+            ref={renamedLottieRef}
+            source={require('../../assets/loading-complete.json')}
+            style={styles.toastLottie}
+            loop={false}
+            autoPlay={false}
+            colorFilters={[{ keypath: 'circle', color: '#7DA17E' }]}
+          />
         </Animated.View>
       )}
     </SafeAreaView>
@@ -1008,6 +1038,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_600SemiBold',
     color: '#FFFFFF',
+  },
+  toastLottie: {
+    width: 24,
+    height: 24,
   },
 
   // Title

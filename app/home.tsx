@@ -11,6 +11,7 @@ import { format } from 'date-fns'
 import { Title, Body, Meta } from '../components/typography'
 import { recordingsStore, Recording } from '../store/recordings'
 import RecordingActionsSheet from '../components/RecordingActionsSheet'
+import LottieView from 'lottie-react-native'
 import RecordingModal from '../components/RecordingModal'
 import RenameModal from '../components/RenameModal'
 import MicPermissionSheet from '../components/MicPermissionSheet'
@@ -137,6 +138,10 @@ export default function Home() {
   const [milestoneToastText, setMilestoneToastText] = useState('')
   const milestoneToastAnim = useRef(new Animated.Value(0)).current
   const milestoneToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Lottie refs for toast checkmarks
+  const toastLottieRef = useRef<LottieView>(null)
+  const renamedToastLottieRef = useRef<LottieView>(null)
 
   // ── Shared Audio Player ──
   const audio = useSharedAudioPlayer()
@@ -284,6 +289,7 @@ export default function Home() {
       tension: 65,
       friction: 11,
     }).start()
+    setTimeout(() => toastLottieRef.current?.play(45, 74), 100)
 
     setTimeout(() => {
       Animated.timing(toastAnim, {
@@ -346,6 +352,7 @@ export default function Home() {
       duration: 300,
       useNativeDriver: true,
     }).start()
+    setTimeout(() => renamedToastLottieRef.current?.play(45, 74), 100)
 
     renamedToastTimerRef.current = setTimeout(() => {
       Animated.timing(renamedToastAnim, {
@@ -629,7 +636,14 @@ export default function Home() {
           ]}
         >
           <View style={styles.toastContent}>
-            <Icon name="check" size={20} color="#FFFFFF" />
+            <LottieView
+              ref={toastLottieRef}
+              source={require('../assets/loading-complete.json')}
+              style={styles.toastLottie}
+              loop={false}
+              autoPlay={false}
+              colorFilters={[{ keypath: 'circle', color: '#7DA17E' }]}
+            />
             <Body style={styles.toastText}>Your recording has been saved</Body>
           </View>
         </Animated.View>
@@ -678,7 +692,14 @@ export default function Home() {
           pointerEvents="none"
         >
           <Body style={styles.renamedToastText}>Name saved</Body>
-          <Icon name="check" size={16} color="#FFFFFF" />
+          <LottieView
+            ref={renamedToastLottieRef}
+            source={require('../assets/loading-complete.json')}
+            style={styles.toastLottie}
+            loop={false}
+            autoPlay={false}
+            colorFilters={[{ keypath: 'circle', color: '#7DA17E' }]}
+          />
         </Animated.View>
       )}
 
@@ -1228,6 +1249,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: 'PlusJakartaSans_500Medium',
+  },
+  toastLottie: {
+    width: 24,
+    height: 24,
   },
 
   // ── Deleted Toast ──

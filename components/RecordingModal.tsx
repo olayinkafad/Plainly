@@ -104,22 +104,17 @@ export default function RecordingModal({
   const recordingViewOpacity = useRef(new Animated.Value(1)).current
   const processingViewOpacity = useRef(new Animated.Value(0)).current
 
-  // Step animations: each step has opacity, translateY, checkScale
+  // Step animations: each step has opacity, translateY, and Lottie progress
   const stepAnims = useRef(
     PROCESSING_STEPS.map(() => ({
       opacity: new Animated.Value(0),
       translateY: new Animated.Value(12),
-      checkScale: new Animated.Value(0),
     }))
   ).current
 
-  // Dot bounce animations (3 dots for active step indicator)
-  const dotScales = useRef([
-    new Animated.Value(0.6),
-    new Animated.Value(0.6),
-    new Animated.Value(0.6),
-  ]).current
-  const dotLoopRef = useRef<Animated.CompositeAnimation | null>(null)
+  // Per-step Lottie refs and states for imperative control
+  const stepLottieRefs = useRef<(LottieView | null)[]>(new Array(PROCESSING_STEPS.length).fill(null))
+  const stepLottieStates = useRef<('idle' | 'loading' | 'complete')[]>(new Array(PROCESSING_STEPS.length).fill('idle'))
 
   const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 
@@ -158,16 +153,12 @@ export default function RecordingModal({
     stepAnims.forEach(s => {
       s.opacity.setValue(0)
       s.translateY.setValue(12)
-      s.checkScale.setValue(0)
     })
 
-    // Stop and reset dot animations
-    if (dotLoopRef.current) {
-      dotLoopRef.current.stop()
-      dotLoopRef.current = null
-    }
-    dotScales.forEach(d => d.setValue(0.6))
-  }, [recordingViewOpacity, processingViewOpacity, stepAnims, dotScales, timeoutMessageAnim])
+    // Stop and reset step Lottie animations
+    stepLottieStates.current = new Array(PROCESSING_STEPS.length).fill('idle')
+    stepLottieRefs.current.forEach(ref => ref?.reset())
+  }, [recordingViewOpacity, processingViewOpacity, stepAnims, timeoutMessageAnim])
 
   useEffect(() => {
     if (isOpen) {
@@ -540,52 +531,26 @@ export default function RecordingModal({
 
   // ── Processing Phase ──
 
-  const startDotBounce = () => {
-    if (dotLoopRef.current) {
-      dotLoopRef.current.stop()
-    }
-    dotScales.forEach(d => d.setValue(0.6))
-
-    const createDotAnim = (dotAnim: Animated.Value, dotDelay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(dotDelay),
-          Animated.timing(dotAnim, {
-            toValue: 1.0,
-            duration: 400,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(dotAnim, {
-            toValue: 0.6,
-            duration: 400,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.delay(400 - dotDelay),
-        ])
-      )
-
-    const loop = Animated.parallel([
-      createDotAnim(dotScales[0], 0),
-      createDotAnim(dotScales[1], 150),
-      createDotAnim(dotScales[2], 300),
-    ])
-    dotLoopRef.current = loop
-    loop.start()
+  const startStepLoading = (index: number) => {
+    stepLottieStates.current[index] = 'loading'
+    // Small delay to ensure LottieView is mounted after step row fade-in
+    setTimeout(() => stepLottieRefs.current[index]?.play(0, 44), 50)
   }
 
-  const stopDotBounce = () => {
-    if (dotLoopRef.current) {
-      dotLoopRef.current.stop()
-      dotLoopRef.current = null
+  const completeStepLoading = (index: number) => {
+    stepLottieStates.current[index] = 'complete'
+    stepLottieRefs.current[index]?.play(45, 74)
+  }
+
+  const handleStepLottieFinish = (index: number, isCancelled: boolean) => {
+    if (!isCancelled && stepLottieStates.current[index] === 'loading') {
+      stepLottieRefs.current[index]?.play(0, 44)
     }
-    dotScales.forEach(d => d.setValue(0.6))
   }
 
   const activateStepAnim = (index: number) => {
     setActiveStep(index)
-    startDotBounce()
+    startStepLoading(index)
 
     // Start timeout tracking for this step
     stepStartTimeRef.current = Date.now()
@@ -621,7 +586,7 @@ export default function RecordingModal({
 
   const completeStepAnim = (index: number) => {
     setCompletedSteps(prev => new Set(prev).add(index))
-    stopDotBounce()
+    completeStepLoading(index)
 
     // Clear timeout tracking
     if (timeoutIntervalRef.current) {
@@ -631,20 +596,6 @@ export default function RecordingModal({
     setTimeoutMessage(null)
     timeoutMessageAnim.setValue(0)
     stepStartTimeRef.current = 0
-
-    Animated.sequence([
-      Animated.timing(stepAnims[index].checkScale, {
-        toValue: 1.1,
-        duration: 250,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-      Animated.timing(stepAnims[index].checkScale, {
-        toValue: 1.0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start()
   }
 
   // Resolve a step (called by the API pipeline when a stage completes)
@@ -872,9 +823,9 @@ export default function RecordingModal({
     stepAnims.forEach(s => {
       s.opacity.setValue(0)
       s.translateY.setValue(12)
-      s.checkScale.setValue(0)
     })
-    dotScales.forEach(d => d.setValue(0.6))
+    stepLottieStates.current = new Array(PROCESSING_STEPS.length).fill('idle')
+    stepLottieRefs.current.forEach(ref => ref?.reset())
 
     // Re-run step sequence and API call
     runStepSequence()
@@ -1243,27 +1194,15 @@ export default function RecordingModal({
                           <View style={styles.stepIndicator}>
                             {isFailed ? (
                               <Icon name="warning" size={20} color={themeLight.accent} />
-                            ) : isCompleted ? (
-                              <Animated.View
-                                style={[
-                                  styles.checkCircle,
-                                  { transform: [{ scale: stepAnims[i].checkScale }] },
-                                ]}
-                              >
-                                <Icon name="check" size={14} color="#FFFFFF" />
-                              </Animated.View>
                             ) : (
-                              <View style={styles.dotRow}>
-                                {dotScales.map((dotScale, di) => (
-                                  <Animated.View
-                                    key={di}
-                                    style={[
-                                      styles.dot,
-                                      { transform: [{ scale: dotScale }] },
-                                    ]}
-                                  />
-                                ))}
-                              </View>
+                              <LottieView
+                                ref={(ref) => { stepLottieRefs.current[i] = ref }}
+                                source={require('../assets/loading-complete.json')}
+                                style={styles.stepLottie}
+                                loop={false}
+                                autoPlay={false}
+                                onAnimationFinish={(isCancelled) => handleStepLottieFinish(i, isCancelled)}
+                              />
                             )}
                           </View>
                           <Body style={isFailed ? styles.stepTextFailed : isCompleted ? styles.stepTextCompleted : styles.stepTextActive}>
@@ -1335,28 +1274,14 @@ export default function RecordingModal({
                       >
                         {/* Indicator */}
                         <View style={styles.stepIndicator}>
-                          {isCompleted ? (
-                            <Animated.View
-                              style={[
-                                styles.checkCircle,
-                                { transform: [{ scale: stepAnims[i].checkScale }] },
-                              ]}
-                            >
-                              <Icon name="check" size={14} color="#FFFFFF" />
-                            </Animated.View>
-                          ) : (
-                            <View style={styles.dotRow}>
-                              {dotScales.map((dotScale, di) => (
-                                <Animated.View
-                                  key={di}
-                                  style={[
-                                    styles.dot,
-                                    { transform: [{ scale: dotScale }] },
-                                  ]}
-                                />
-                              ))}
-                            </View>
-                          )}
+                          <LottieView
+                            ref={(ref) => { stepLottieRefs.current[i] = ref }}
+                            source={require('../assets/loading-complete.json')}
+                            style={styles.stepLottie}
+                            loop={false}
+                            autoPlay={false}
+                            onAnimationFinish={(isCancelled) => handleStepLottieFinish(i, isCancelled)}
+                          />
                         </View>
 
                         {/* Label */}
@@ -1598,30 +1523,14 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   stepIndicator: {
-    width: 34,
-    height: 24,
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-  },
-  checkCircle: {
     width: 24,
     height: 24,
-    borderRadius: 12,
-    backgroundColor: themeLight.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dotRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: themeLight.accent,
+  stepLottie: {
+    width: 24,
+    height: 24,
   },
   stepTextActive: {
     fontFamily: 'PlusJakartaSans_600SemiBold',
@@ -1712,7 +1621,7 @@ const styles = StyleSheet.create({
   timeoutMessageContainer: {
     marginTop: 24,
     alignItems: 'flex-start',
-    paddingLeft: 34 + 12,
+    paddingLeft: 24 + 12,
   },
   timeoutMessageText: {
     fontFamily: 'PlusJakartaSans_400Regular',
