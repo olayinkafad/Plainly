@@ -1062,7 +1062,7 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   sectionLabel: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'PlayfairDisplay_700Bold',
     fontSize: 20,
     color: themeLight.textPrimary,
   },
