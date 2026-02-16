@@ -599,6 +599,10 @@ export default function RecordingDetail() {
     if (!recording) return
     try {
       await recordingsStore.delete(recording.id)
+      const remaining = await recordingsStore.getAll()
+      if (remaining.length === 0) {
+        await AsyncStorage.setItem('@plainly_has_deleted_all', 'true')
+      }
       router.push('/home?deleted=1')
     } catch (error) {
       console.error('Failed to delete recording:', error)
